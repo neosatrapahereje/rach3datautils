@@ -42,12 +42,12 @@ class VideoInfo(object):
         video_streams=None,
         audio_streams=None,
         data_streams=None,
-        length=None,
+        duration=None,
     ):
         self.video_streams = video_streams or []
         self.audio_streams = audio_streams or []
         self.data_streams = data_streams or []
-        self.length = length
+        self.duration = duration
 
     @property
     def width(self):
@@ -138,7 +138,7 @@ def get_frame_rate(filename):
     return -1
 
 
-def get_video_length(filename):
+def get_video_duration(filename):
 
     out = subprocess.check_output(
         [
@@ -198,4 +198,11 @@ def get_video_info(filename):
         else:
             data_streams.append(stream)
 
-    return VideoInfo(video_streams, audio_streams, data_streams)
+    duration = get_video_duration(filename)
+
+    return VideoInfo(
+        video_streams=video_streams,
+        audio_streams=audio_streams,
+        data_streams=data_streams,
+        duration=duration,
+    )
