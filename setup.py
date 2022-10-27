@@ -21,6 +21,8 @@ REQUIRED = []
 # Optional
 EXTRAS = {}
 
+SCRIPTS = ["bin/R3GetVideoHash"]
+
 here = os.path.abspath(os.path.dirname(__file__))
 
 try:
