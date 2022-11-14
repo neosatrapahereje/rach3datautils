@@ -55,6 +55,7 @@ setup(
     install_requires=REQUIRED,
     extras_require=EXTRAS,
     include_package_data=True,
+    scripts=SCRIPTS,
     # license="Apache 2.0",
     classifiers=[
         # Trove classifiers
