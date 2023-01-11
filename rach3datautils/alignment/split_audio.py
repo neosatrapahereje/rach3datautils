@@ -84,13 +84,21 @@ def main(args: list[str] = None):
         first_note = a_d_tools.get_first_time(midi)
         breaks -= first_note
 
+        # Get duration of current file. Used to calculate where to split it.
+        duration = a_d_tools.get_len(flac_file)
+
+        # We also want the timestamp of the last note. This is necessary in
+        # order to calculate the split points from the right.
+        duration_midi = a_d_tools.get_last_time(midi)
+
         # Calculate the exact timestamps at which to split.
         breakpoints = []
         for m in breaks:
             breakpoints.append(m[0] + ((m[1] - m[0]) / 2))
 
-        # Get duration of current file. Used to calculate where to split it.
-        duration = a_d_tools.get_len(flac_file)
+        for i, b in enumerate(breakpoints):
+            if b > duration / 2:
+                breakpoints[i] = duration - (duration_midi - b)
 
         # Calculate exact timestamps at which to split file.
         splits = []

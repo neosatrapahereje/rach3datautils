@@ -88,12 +88,21 @@ class AudioVideoTools:
 
         return breaks
 
-    def get_first_time(self, midi: Performance) -> float:
+    @staticmethod
+    def get_first_time(midi: Performance) -> float:
         """
         Get the time of the first note in a performance.
         """
         note_array = midi.note_array()
         return note_array[0][0]
+
+    @staticmethod
+    def get_last_time(midi: Performance) -> float:
+        """
+        Get the timestamp when the last note was played.
+        """
+        note_array = midi.note_array()
+        return note_array[-1][0]
 
     def split_audio(self, audio_path: Union[Path, str], split_start: float,
                     split_end: float, output: Union[Path, str],
@@ -130,10 +139,8 @@ class AudioVideoTools:
         Additionally, if a path to a file is specified, checks if the file
         already exists and returns true or false based on overwrite parameter.
 
-        Parameters
-        ----------
-        path: Path object
-        -------
+        I'm pretty sure this function is buggy, there's def improvement to be
+        done.
         """
         if path.exists() or path.parent.exists():
             if path.is_dir() or path.parent.is_dir():
