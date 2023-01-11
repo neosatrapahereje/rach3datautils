@@ -1,0 +1,3 @@
+partitura
+ffmpeg-python
+ffprobe-python
