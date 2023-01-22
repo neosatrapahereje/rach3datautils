@@ -1,14 +1,16 @@
 import partitura as pt
 import argparse
 from pathlib import Path
-from dataset_utils import DatasetUtils
-from video_audio_tools import AudioVideoTools
+from .dataset_utils import DatasetUtils
+from .video_audio_tools import AudioVideoTools
+import os
 
 
 def main(args: list[str] = None):
     """
-    Detect pauses in playing based on midi file, and split audio at these pauses.
-    The aim is to reduce time drifting between the video file and flac file.
+    Detect pauses in playing based on midi file, and split audio at these
+    pauses. The aim is to reduce time drifting between the video file and flac
+    file.
     """
     parser = argparse.ArgumentParser(
         prog="Midi Based Video and Audio Splitter",
@@ -20,7 +22,7 @@ def main(args: list[str] = None):
                         action="store",
                         help="Root directory of the dataset. If not set, the"
                              "current working folder is used.",
-                        default="./trimmed_silence")
+                        required=True)
 
     parser.add_argument("-w", "--overwrite",
                         action="store_true",
@@ -29,28 +31,40 @@ def main(args: list[str] = None):
     parser.add_argument("-o", "--output_dir",
                         action="store",
                         help="Directory where to store output files.",
-                        default="./audio_split")
+                        default="./audio_split/")
     parser.add_argument("-pd", "--processed_directory",
                         action="store",
                         help="The directory where the full mp3 files are kept."
                              "Where the output of trim_silence.py went.",
-                        default="./trimmed_silence")
+                        default="./trimmed_silence/")
 
     args = parser.parse_args(args)
     output_dir = Path(args.output_dir)
     pd = Path(args.processed_directory)
+
+    if output_dir.suffix:
+        raise AttributeError("output_dir must be a path to a valid directory")
+    elif not pd.is_dir():
+        raise AttributeError("processed_directory must be a path to a valid "
+                             "directory")
+
+    if not output_dir.exists():
+        os.mkdir(output_dir)
+    if not pd.exists():
+        os.mkdir(pd)
+
     a_d_tools = AudioVideoTools()
 
     # We are working with midi and audio files here, so lets gather those.
     dataset = DatasetUtils(args.root_directory)
     pd_util = DatasetUtils(pd)
     all_files = [
-        i for i in dataset.get_files_by_type(filetype=["mid"])
-            if dataset.is_valid_midi(i)]
+        i for i in dataset.get_files_by_type(filetype=["mid", "flac"])
+        if dataset.is_valid_midi(i) or dataset.is_full_flac(i)]
 
     # Get all the full audio files from the processed folder.
-    [all_files.append(i) for i in pd_util.get_files_by_type(["mp3", "flac"])
-                 if pd_util.is_trimmed(i)]
+    [all_files.append(i) for i in pd_util.get_files_by_type(["mp3"])
+     if pd_util.is_trimmed(i)]
 
     # Get rid of the warmup files.
     all_files_no_warmup = [
@@ -112,15 +126,16 @@ def main(args: list[str] = None):
 
         # Split files at the calculated timestamps
         for m, (n, o) in enumerate(splits):
-            outputs = [output_dir.joinpath(i.stem + f"_split{m+1}" + i.suffix)
+            outputs = [(i, output_dir.joinpath(
+                i.stem + f"_split{m+1}" + i.suffix))
                        for i in [flac_file, full_audio_file]]
 
-            [a_d_tools.split_audio(audio_path=flac_file,
-                                  split_start=n,
-                                  split_end=o,
-                                  output=i,
-                                  overwrite=args.overwrite)
-            for i in outputs]
+            [a_d_tools.split_audio(audio_path=i[0],
+                                   split_start=n,
+                                   split_end=o,
+                                   output=i[1],
+                                   overwrite=args.overwrite) for i in outputs]
+
 
 if __name__ == "__main__":
     main()

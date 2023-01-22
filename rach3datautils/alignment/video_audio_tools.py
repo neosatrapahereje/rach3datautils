@@ -3,7 +3,6 @@ import os
 from partitura.performance import Performance
 from pathlib import Path
 from typing import Union
-from ffprobe import FFProbe
 
 
 class AudioVideoTools:
@@ -15,14 +14,18 @@ class AudioVideoTools:
                       overwrite: bool = False) -> Path:
         """
         Extract audio from a video file. Returns the filepath of the new audio
-        file.
+        file. If no output is specified outputs the file in the same folder
+        as the original video.
         """
 
         if output is None:
             output = Path(os.path.join(".", "audio_files",
                                        filepath.stem + "_audio.mp3"))
+        elif not output.suffix == ".mp4":
+            raise AttributeError("Output must either be None or a valid path "
+                                 "to a .mp4 file")
 
-        if not self._check_path(output, overwrite=overwrite):
+        if output.is_file() and not overwrite:
             return output
 
         video = ffmpeg.input(filepath)
@@ -40,8 +43,11 @@ class AudioVideoTools:
         Returns path to new audio file.
         """
 
+        if not output.suffix == ".mp3":
+            raise AttributeError("Output must be a valid path to a .mp3 file")
+
         # Only rewrite files if its explicitly stated
-        if not self._check_path(output, overwrite=overwrite):
+        if output.is_file() and not overwrite:
             return output
 
         streams = []
@@ -120,7 +126,9 @@ class AudioVideoTools:
         -------
         """
         # Only rewrite files if its explicitly stated
-        if not self._check_path(output, overwrite=overwrite, create_dir=True):
+        if not output.suffix:
+            raise AttributeError("Output must be a path to a file")
+        elif output.is_file() and not overwrite:
             return output
 
         input_file = ffmpeg.input(audio_path)
@@ -129,33 +137,6 @@ class AudioVideoTools:
         out = ffmpeg.output(trimmed, filename=output)
         out = ffmpeg.overwrite_output(out)
         out.run()
-
-    @staticmethod
-    def _check_path(path: Path, overwrite: bool, create_dir: bool = True):
-        """
-        Take a path and check if the folder exists. If it does not exist, either
-        create it, or return false based on create_dir setting.
-
-        Additionally, if a path to a file is specified, checks if the file
-        already exists and returns true or false based on overwrite parameter.
-
-        I'm pretty sure this function is buggy, there's def improvement to be
-        done.
-        """
-        if path.exists() or path.parent.exists():
-            if path.is_dir() or path.parent.is_dir():
-                return True
-            elif path.is_file and overwrite:
-                return True
-        else:
-            if path.suffix == "":
-                if create_dir:
-                    os.mkdir(path)
-                    return True
-            elif path.parent and create_dir:
-                os.mkdir(path.parent)
-                return True
-        return False
 
     @staticmethod
     def get_len(audio_path: Union[Path, str]) -> float:
@@ -167,9 +148,8 @@ class AudioVideoTools:
         audio_path: path to audio file
         -------
         """
-        metadata = FFProbe(audio_path)
-        duration = [float(i) for i in metadata.metadata["Duration"].split(":")]
-        duration = duration[0] * 60 * 60 + duration[1] * 60 + duration[2]
+        metadata = ffmpeg.probe(audio_path)
+        duration = float(metadata["format"]["duration"])
         return duration
 
     @staticmethod
@@ -197,8 +177,11 @@ class AudioVideoTools:
         threshold: at what loudness level in decibels to detect sound
         -------
         """
-        if not self._check_path(output, overwrite=overwrite, create_dir=True):
-            return None
+        if not output.suffix:
+            raise AttributeError("Output must be a path to a file")
+
+        if output.is_file() and not overwrite:
+            return
 
         input_file = ffmpeg.input(file)
         audio = input_file.audio

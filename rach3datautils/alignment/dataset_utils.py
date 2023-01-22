@@ -58,7 +58,7 @@ class DatasetUtils:
             str(file_2)[:-7] + str(file_2)[-4:]
 
     def get_sessions(self, filetype: Union[str, list] = None) -> \
-            defaultdict[list[Path]]:
+            defaultdict[str, list[Path]]:
         """
         Returns a dictionary with all dates and sessions. Each key is one
         session.
@@ -75,7 +75,8 @@ class DatasetUtils:
         return sessions
 
     def sort_by_date_and_session(self,
-                                 files: list[Path]) -> defaultdict[list[Path]]:
+                                 files: list[Path]) -> \
+            defaultdict[str, list[Path]]:
         """
         Take a list of files and return a dictionary of form
         dict[date_session] = fileslist
@@ -132,6 +133,7 @@ class DatasetUtils:
         """
 
         return file.stem.split("_")[-1] == "trimmed"
+
     @staticmethod
     def is_warmup(file: Path) -> bool:
         """
@@ -150,7 +152,6 @@ class DatasetUtils:
     def is_valid_midi(file: Path) -> bool:
         """
         Check if a midi file is valid.
-        Parameters
         """
         split_len = len(file.stem.split("_"))
         if split_len != 3:

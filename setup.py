@@ -16,7 +16,7 @@ REQUIRES_PYTHON = ">=3.6"
 VERSION = "0.0.1"
 
 # Required packages
-REQUIRED = []
+REQUIRED = ["partitura", "ffmpeg-python"]
 
 # Optional
 EXTRAS = {}

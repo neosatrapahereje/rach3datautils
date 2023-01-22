@@ -1,7 +1,9 @@
 import argparse
-from dataset_utils import DatasetUtils
-from video_audio_tools import AudioVideoTools
+from .dataset_utils import DatasetUtils
+from .video_audio_tools import AudioVideoTools
 from pathlib import Path
+import os
+
 
 def main(args=None):
     """
@@ -17,7 +19,7 @@ def main(args=None):
                         action="store",
                         help="Root directory where the audio files are stored. "
                              "If not set './concat_audio is used.",
-                        default="./concat_audio")
+                        default="./concat_audio/")
 
     parser.add_argument("-w", "--overwrite",
                         action="store_true",
@@ -27,7 +29,7 @@ def main(args=None):
     parser.add_argument("-o", "--output_directory",
                         action="store",
                         help="Folder where the output should go.",
-                        default="./trimmed_silence")
+                        default="./trimmed_silence/")
 
     args = parser.parse_args(args)
 
@@ -35,6 +37,11 @@ def main(args=None):
     output_dir = Path(args.output_directory)
     dataset_utils = DatasetUtils(root_dir)
     a_v_tools = AudioVideoTools()
+
+    if output_dir.suffix:
+        raise AttributeError("output_dir must be a valid path to a directory")
+    elif not output_dir.exists():
+        os.mkdir(output_dir)
 
     # Gather all full audio and flac files
     all_audio_files = [i for i in dataset_utils.get_files_by_type(
@@ -52,14 +59,15 @@ def main(args=None):
         if i.suffix == ".flac":
             # The flac files are quieter than the mp3, so we need a lower
             # threshold.
-            threshold = -40
+            threshold = -60
         else:
-            threshold = -20
+            threshold = -21
 
         a_v_tools.trim_silence(file=i,
                                output=output_path,
                                overwrite=args.overwrite,
                                threshold=threshold)
+
 
 if __name__ == "__main__":
     main()
