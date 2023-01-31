@@ -3,9 +3,9 @@ import filecmp
 import re
 import datetime
 import glob
-
+from tqdm import tqdm
 import numpy as np
-
+from typing import Union
 from rach3datautils.misc import PathLike, get_md5_hash
 
 from typing import Optional, List
@@ -83,15 +83,7 @@ def get_video_hash(filename: PathLike, video_dirs: List[PathLike]) -> None:
         hashes = {}
 
     else:
-
-        data = np.loadtxt(
-            fname=filename,
-            dtype=str,
-            delimiter="\t",
-            comments="#",
-        )
-        # Load hashed files
-        hashes = dict([(video[0], video[1]) for video in data])
+        hashes = load_hash_file(filepath=filename)
 
     # get all videos in the video_dirs
     for vdir in video_dirs:
@@ -115,6 +107,51 @@ def get_video_hash(filename: PathLike, video_dirs: List[PathLike]) -> None:
                 computed = True
 
                 print(f"{basename}:{hashes[basename]} computed: {computed}")
+
+
+def load_hash_file(filepath: PathLike) -> dict[str, str]:
+    """
+    Load a file with video hashes in it.
+    """
+
+    data = np.loadtxt(
+        fname=filepath,
+        dtype=str,
+        delimiter="\t",
+        comments="#",
+    )
+    # Load hashed files
+    return dict([(video[0], video[1]) for video in data])
+
+
+def check_hashes(hash_file: PathLike, video_dirs: list[PathLike]) -> \
+        Union[bool, list]:
+    """
+    Given a file with video hashes, check hashes against video files in given
+    directory.
+    """
+    hashes = load_hash_file(hash_file)
+    mismatched: list[str] = []
+    for vdir in video_dirs:
+        print(f"Checking {vdir}")
+        videos = glob.glob(os.path.join(vdir, "*", "*.mp4"))
+
+        existing_videos = [i for i in videos if os.path.basename(i) in hashes]
+
+        if len(videos) != len(existing_videos):
+            print(f"Hashes not found in the hash file for "
+                  f"{abs(len(videos)-len(existing_videos))} videos.")
+
+        for video in tqdm(existing_videos):
+            vid_hash = get_md5_hash(video)
+
+            if hashes[os.path.basename(video)] != vid_hash:
+                print(f"Hash does not match for: {video}")
+                mismatched.append(video)
+
+    if mismatched:
+        return mismatched
+    return True
 
 
 if __name__ == "__main__":

@@ -8,7 +8,7 @@ TODO
 import datetime
 import os
 import subprocess
-
+import hashlib
 from typing import Union
 
 
@@ -67,13 +67,9 @@ def get_md5_hash(filename: PathLike) -> str:
     md5_hash : str
         The hash of the file.
     """
-    command = ["md5", "-q", filename]
-    checksum_process = subprocess.run(
-        command,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        universal_newlines=True,
-    )
+    md5 = hashlib.md5()
+    with open(filename, 'rb') as f:
+        while chunk := f.read(4096):
+            md5.update(chunk)
 
-    md5_hash = str(checksum_process.stdout.split()[-1])
-    return md5_hash
+    return md5.hexdigest()
