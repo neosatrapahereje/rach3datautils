@@ -37,7 +37,7 @@ class DatasetUtils:
             filetype = [filetype]
 
         files = []
-        [files.extend(Path(self.root).rglob('*.'+i)) for i in filetype]
+        [files.extend(Path(self.root).rglob('*.' + i)) for i in filetype]
         return files
 
     @staticmethod
@@ -157,3 +157,16 @@ class DatasetUtils:
         if split_len != 3:
             return False
         return True
+
+    @staticmethod
+    def is_full_video(file: Path):
+        """
+        Check if a file is a full video file of a session
+        """
+        if file.suffix != ".mp4":
+            return False
+
+        split = file.stem.split("_")
+        if "full" in split:
+            return True
+        return False

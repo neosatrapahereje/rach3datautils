@@ -3,6 +3,7 @@ import os
 from partitura.performance import Performance
 from pathlib import Path
 from typing import Union
+import tempfile
 
 
 class AudioVideoTools:
@@ -10,7 +11,8 @@ class AudioVideoTools:
     Contains useful ffmpeg pipelines for working with audio and video.
     """
 
-    def extract_audio(self, filepath: Path, output: Path = None,
+    @staticmethod
+    def extract_audio(filepath: Path, output: Path = None,
                       overwrite: bool = False) -> Path:
         """
         Extract audio from a video file. Returns the filepath of the new audio
@@ -35,31 +37,40 @@ class AudioVideoTools:
         out.run()
         return output
 
-    def concat_audio(self, audio_files: list, output: Path,
-                     overwrite: bool = False) -> Path:
+    @staticmethod
+    def concat(files: list[Path], output: Path,
+               overwrite: bool = False) -> Path:
         """
-        Takes a list of audio files and concatenates them into one file. They
-        will be concatenated in the order present within the list.
+        Takes a list of audio or video files and concatenates them into one
+        file. They will be concatenated in the order present within the list.
         Returns path to new audio file.
         """
 
-        if not output.suffix == ".mp3":
-            raise AttributeError("Output must be a valid path to a .mp3 file")
+        if output.suffix not in [".mp3", ".mp4"]:
+            raise AttributeError("Output must be a valid path to a .mp3 or "
+                                 ".mp4 file")
 
         # Only rewrite files if its explicitly stated
         if output.is_file() and not overwrite:
             return output
 
-        streams = []
+        streams = [str(i) for i in files if i.suffix in [".mp4", ".mp3"]]
 
-        for i in audio_files:
-            ffmpeg_input = ffmpeg.input(i)
-            streams.append(ffmpeg_input)
+        try:
+            with tempfile.TemporaryFile(mode="w",
+                                        prefix="concat_file",
+                                        suffix=".txt",
+                                        delete=False) as f:
+                [f.write(f"file '{stream}'\n") for stream in streams]
 
-        concatenated = ffmpeg.concat(*streams, v=0, a=1)
-        out = ffmpeg.output(concatenated, filename=output)
-        out = ffmpeg.overwrite_output(out)
-        out.run()
+            # This is a bit of a hack, there's probably a better way to do it.
+            concatenated = ffmpeg.input(Path(f.name), f='concat', safe=0)
+            out = ffmpeg.output(concatenated, filename=output, c="copy")
+            out = ffmpeg.overwrite_output(out)
+            out.run()
+        finally:
+            os.unlink(f.name)
+
         return output
 
     @staticmethod
@@ -110,7 +121,8 @@ class AudioVideoTools:
         note_array = midi.note_array()
         return note_array[-1][0]
 
-    def split_audio(self, audio_path: Union[Path, str], split_start: float,
+    @staticmethod
+    def split_audio(audio_path: Union[Path, str], split_start: float,
                     split_end: float, output: Union[Path, str],
                     overwrite: bool = False) -> Union[Path, str]:
         """
@@ -164,7 +176,8 @@ class AudioVideoTools:
         """
         [os.remove(i) for i in files]
 
-    def trim_silence(self, file: Path, output: Path,
+    @staticmethod
+    def trim_silence(file: Path, output: Path,
                      overwrite: bool = False, threshold: int = -20) -> None:
         """
         Trim silence at start and end of a given file.
@@ -185,6 +198,7 @@ class AudioVideoTools:
 
         input_file = ffmpeg.input(file)
         audio = input_file.audio
+        video = input_file.video
         trimmed = audio.filter(
             "silenceremove",
             start_periods=1,
