@@ -23,16 +23,15 @@ class AudioVideoTools:
         if output is None:
             output = Path(os.path.join(".", "audio_files",
                                        filepath.stem + "_audio.mp3"))
-        elif not output.suffix == ".mp4":
+        elif not output.suffix == ".aac":
             raise AttributeError("Output must either be None or a valid path "
-                                 "to a .mp4 file")
+                                 "to a .acc file")
 
         if output.is_file() and not overwrite:
             return output
 
         video = ffmpeg.input(filepath)
-        audio = video.audio
-        out = ffmpeg.output(audio, filename=output)
+        out = ffmpeg.output(video.audio, filename=output, c="copy")
         out = ffmpeg.overwrite_output(out)
         out.run()
         return output
@@ -46,30 +45,28 @@ class AudioVideoTools:
         Returns path to new audio file.
         """
 
-        if output.suffix not in [".mp3", ".mp4"]:
-            raise AttributeError("Output must be a valid path to a .mp3 or "
+        if output.suffix not in [".aac", ".mp4"]:
+            raise AttributeError("Output must be a valid path to a .acc or "
                                  ".mp4 file")
 
         # Only rewrite files if its explicitly stated
         if output.is_file() and not overwrite:
             return output
 
-        streams = [str(i) for i in files if i.suffix in [".mp4", ".mp3"]]
+        streams = [str(i) for i in files if i.suffix in [".mp4", ".aac"]]
 
-        try:
-            with tempfile.TemporaryFile(mode="w",
-                                        prefix="concat_file",
-                                        suffix=".txt",
-                                        delete=False) as f:
-                [f.write(f"file '{stream}'\n") for stream in streams]
+        tmp = tempfile.NamedTemporaryFile(mode="w",
+                                          prefix="concat_file",
+                                          suffix=".txt")
 
-            # This is a bit of a hack, there's probably a better way to do it.
-            concatenated = ffmpeg.input(Path(f.name), f='concat', safe=0)
-            out = ffmpeg.output(concatenated, filename=output, c="copy")
-            out = ffmpeg.overwrite_output(out)
-            out.run()
-        finally:
-            os.unlink(f.name)
+        with open(tmp.name, "w") as f:
+            [f.write(f"file '{stream}'\n") for stream in streams]
+
+        # This is a bit of a hack, there's probably a better way to do it.
+        concatenated = ffmpeg.input(Path(f.name), f='concat', safe=0)
+        out = ffmpeg.output(concatenated, filename=output, c="copy")
+        out = ffmpeg.overwrite_output(out)
+        out.run()
 
         return output
 

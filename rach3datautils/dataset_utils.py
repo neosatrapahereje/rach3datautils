@@ -1,7 +1,102 @@
 from pathlib import Path
 from collections import defaultdict
 import re
-from typing import Union
+from typing import Union, Dict
+from rach3datautils.backup_files import PathLike
+import partitura as pt
+from partitura.performance import Performance
+
+
+class Session:
+    """
+    An object representing one session. Contains all files corresponding to
+    the session.
+    """
+    def __init__(self,
+                 videos: list[PathLike] = None,
+                 audios: list[PathLike] = None,
+                 midi: PathLike = None,
+                 full_audio: PathLike = None,
+                 flac: PathLike = None,
+                 full_video: PathLike = None):
+        """
+        Takes filepaths as input and initializes the session object.
+        """
+        self.paths: Dict[str, Union[list[Path], Path, None]] = {
+            "videos": None,
+            "audios": None,
+            "midi": None,
+            "flac": None,
+            "full_audio": None,
+            "full_video": None
+        }
+        all_vars = [videos, audios, midi, full_audio, full_video, flac]
+        [self.set_unknown(i) for i in all_vars if i is not None]
+
+        # Initialize the performance object as None since we don't want to
+        # perform any fancy operations to load it until it's needed.
+        self._performance: Union[Performance, None] = None
+
+    def __getitem__(self, item: str) -> Union[list[Path], Performance, Path]:
+        """
+        Get an item from the session. The item is loaded if it has not been
+        accessed yet.
+
+        possible items are listed in Session.paths.keys
+
+        When accessing the midi file a partitura.Performance is returned.
+
+        To get the filepaths use Session.paths dictionary.
+        """
+        if item == "midi":
+            return self._midi()
+        return self.paths[item]
+
+    def _midi(self) -> Performance:
+        if self._performance is None and self.paths["midi"] is not None:
+            self.performance = pt.load_performance_midi(self.paths["midi"])
+        return self.performance
+
+    def __setitem__(self, key: str,
+                    value: Union[PathLike, list[PathLike]]):
+        """
+        Set an item in the session. Will overwrite old values.
+        """
+        if key in ["videos", "audios"]:
+            if not isinstance(value, list):
+                self.paths[key] = [Path(value)]
+
+        self.paths[key] = Path(value)
+
+    def set_unknown(self, value: Union[PathLike, list[PathLike]]):
+        filetype = PathUtils().get_type(Path(value))
+        if isinstance(value, list):
+            for i in value:
+                self[filetype] = Path(i)
+            return
+        self[filetype] = Path(value)
+
+    def append_unknown(self, value: Union[PathLike, list[PathLike]]):
+        """
+        Tries to append the value to the already existing ones. Falls back
+        to set_unknown if the value cannot be appended.
+        """
+        value = Path(value)
+        filetype = PathUtils().get_type(value)
+
+        if filetype not in ["videos", "audios"]:
+            return self.set_unknown(value)
+
+        try:
+            if isinstance(value, list):
+                for i in value:
+                    self[filetype].append(i)
+                return
+            self[filetype].append(value)
+
+        except AttributeError:
+            # The value was never set / is still None
+            self.set_unknown(value)
 
 
 class DatasetUtils:
@@ -58,7 +153,7 @@ class DatasetUtils:
             str(file_2)[:-7] + str(file_2)[-4:]
 
     def get_sessions(self, filetype: Union[str, list] = None) -> \
-            defaultdict[str, list[Path]]:
+            defaultdict[str, Session]:
         """
         Returns a dictionary with all dates and sessions. Each key is one
         session.
@@ -74,30 +169,49 @@ class DatasetUtils:
 
         return sessions
 
-    def sort_by_date_and_session(self,
-                                 files: list[Path]) -> \
-            defaultdict[str, list[Path]]:
+    @staticmethod
+    def sort_by_date_and_session(files: list[Path]) -> \
+            defaultdict[str, Session]:
         """
         Take a list of files and return a dictionary of form
         dict[date_session] = fileslist
         """
 
-        sorted_files = defaultdict(list)
+        sorted_files = defaultdict(Session)
 
         for i in files:
-            date = self._get_date(i)
-            session_no = self._get_session_no(i)
+            date = PathUtils().get_date(i)
+            session_no = PathUtils().get_session_no(i)
 
             if session_no is None or date is None:
                 raise AttributeError(f"The path {i} could not be "
                                      f"identified.")
             else:
-                sorted_files[date + "_a" + session_no].append(i)
+                sorted_files[date + "_a" + session_no].append_unknown(i)
 
         return sorted_files
 
+
+class PathUtils:
+    """
+    Contains various functions that help working with paths within the dataset.
+    """
+    def get_type(self, path: Path) -> str:
+        if self.is_valid_midi(path):
+            return "midi"
+        elif self.is_full_flac(path):
+            return "flac"
+        elif path.suffix == ".mp4":
+            if self.is_full_video(path):
+                return "full_video"
+            return "video"
+        elif path.suffix == ".aac":
+            if self.is_full_audio(path):
+                return "full_audio"
+            return "audio"
+
     @staticmethod
-    def _get_session_no(file: Path) -> Union[str, None]:
+    def get_session_no(file: Path) -> Union[str, None]:
         """
         Get the session number from a given file in the format 01, 02, etc.
         """
@@ -107,7 +221,7 @@ class DatasetUtils:
         return None
 
     @staticmethod
-    def _get_date(file: Path) -> Union[str, None]:
+    def get_date(file: Path) -> Union[str, None]:
         """
         Get the date from a given file.
         """
@@ -124,7 +238,7 @@ class DatasetUtils:
         extract_and_concat_audio.
         """
 
-        return file.stem.split("_")[-1] == "full"
+        return file.stem.split("_")[-1] == "full" and file.suffix == ".aac"
 
     @staticmethod
     def is_trimmed(file: Path) -> bool:
@@ -155,6 +269,8 @@ class DatasetUtils:
         """
         split_len = len(file.stem.split("_"))
         if split_len != 3:
+            return False
+        if not file.suffix == ".mid":
             return False
         return True
 

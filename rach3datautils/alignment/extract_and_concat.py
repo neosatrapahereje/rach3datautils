@@ -45,12 +45,13 @@ def main(root_dir: PathLike,
     else:
         workdir = root_dir
 
+    session_files = []
     try:
         for s, i in video_files.items():
             # Create the path to the output file based on name of current
             # session.
             if audio_only:
-                output_path = output.joinpath(s + "_full.mp3")
+                output_path = output.joinpath(s + "_full.aac")
             else:
                 output_path = output.joinpath(s + "_full.mp4")
 
@@ -63,7 +64,8 @@ def main(root_dir: PathLike,
                     a_d_tools.extract_audio(filepath=j,
                                             overwrite=overwrite,
                                             output=workdir.joinpath(
-                                                j.name)) for j in i]
+                                                j.with_suffix(".aac").name))
+                    for j in i]
             else:
                 session_files = i
 
@@ -82,37 +84,32 @@ def main(root_dir: PathLike,
             os.rmdir(workdir)
 
 
-def _audio_workflow(input_file: PathLike):
-    """
-    Audio centered workflow for extract_and_concat
-    """
-
-
-
 if __name__ == "__main__":
     # Let's set up some argument parsing for ease of use.
     parser = argparse.ArgumentParser(
         prog="Extract audio/video and concatenate",
-        description="To be used with rach3 dataset. This script takes the video"
-                    "files, extracts the audio, and then combines the audios "
-                    "that come from the same recording. e.g the audio from "
-                    "the 2 files: rach_3_2022-03-20_p001 and rach_3_2022-03-"
-                    "20_p002 get combined into one file.")
+        description="Take a folder containing one or more complete sesions "
+                    "and combine all the sub-videos and audios into 1 session "
+                    "video or audio.")
 
     parser.add_argument("-d", "--root_directory", action='store',
-                        help='The root directory where the dataset is located. '
-                             'All folders and subfolders in this directory '
-                             'will be searched.')
+                        help='The root directory where the dataset is '
+                             'located. All folders and subfolders in this '
+                             'directory will be searched.')
     parser.add_argument("-w", "--overwrite", action='store_true',
-                        help='If the concatenated audio files exist already, '
+                        help='If the concatenated files exist already, '
                              'whether to overwrite them.')
     parser.add_argument("-o", "--output_dir", action='store',
-                        help='Where to output processed files. If the directory'
-                             'does not exist, a new one will be created.',
+                        help='Where to output processed files. If the '
+                             'directory does not exist, a new one will be '
+                             'created.',
                         default='./concat/')
+    parser.add_argument("-a", "--audio-only", action="store_true",
+                        help="Whether to output only the audio.")
 
     args = parser.parse_args()
 
     main(root_dir=args.root_directory,
          output_dir=args.output_dir,
-         overwrite=args.overwrite)
+         overwrite=args.overwrite,
+         audio_only=args.audio_only)
