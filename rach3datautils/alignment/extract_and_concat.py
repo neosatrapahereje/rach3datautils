@@ -39,6 +39,8 @@ def main(root_dir: PathLike,
 
     # Use a temporary working directory for audio files if extracting them.
     if audio_only:
+        # TODO
+        # This area should use the tempfile module
         workdir = Path(output.joinpath("_temp/"))
         if not workdir.exists():
             workdir.mkdir()
@@ -65,9 +67,9 @@ def main(root_dir: PathLike,
                                             overwrite=overwrite,
                                             output=workdir.joinpath(
                                                 j.with_suffix(".aac").name))
-                    for j in i]
+                    for j in i["videos"]]
             else:
-                session_files = i
+                session_files = i["videos"]
 
             # Concatenate session files into one
             a_d_tools.concat(

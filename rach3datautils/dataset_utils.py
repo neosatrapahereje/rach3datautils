@@ -23,8 +23,8 @@ class Session:
         Takes filepaths as input and initializes the session object.
         """
         self.paths: Dict[str, Union[list[Path], Path, None]] = {
-            "videos": None,
-            "audios": None,
+            "videos": [],
+            "audios": [],
             "midi": None,
             "flac": None,
             "full_audio": None,
@@ -42,17 +42,16 @@ class Session:
         Get an item from the session. The item is loaded if it has not been
         accessed yet.
 
-        possible items are listed in Session.paths.keys
-
-        When accessing the midi file a partitura.Performance is returned.
-
-        To get the filepaths use Session.paths dictionary.
+        possible items are listed in Session.paths.keys. Additionally a
+        performance can be requested which is loaded on demand from the midi
+        file.
         """
-        if item == "midi":
-            return self._midi()
+        if item == "performance":
+            return self._load_midi()
+
         return self.paths[item]
 
-    def _midi(self) -> Performance:
+    def _load_midi(self) -> Performance:
         if self._performance is None and self.paths["midi"] is not None:
             self.performance = pt.load_performance_midi(self.paths["midi"])
         return self.performance
@@ -60,43 +59,55 @@ class Session:
     def __setitem__(self, key: str,
                     value: Union[PathLike, list[PathLike]]):
         """
-        Set an item in the session. Will overwrite old values.
+        Set an item in the session. Will overwrite old values, including
+        lists.
         """
-        if key in ["videos", "audios"]:
+        if key in ["video", "audio"]:
+            if key == "video":
+                key = "videos"
+            elif key == "audio":
+                key = "audios"
+
             if not isinstance(value, list):
                 self.paths[key] = [Path(value)]
+            else:
+                self.paths[key] = [Path(i) for i in value]
 
-        self.paths[key] = Path(value)
+        elif key == "performance":
+            self.performance = value
 
-    def set_unknown(self, value: Union[PathLike, list[PathLike]]):
-        filetype = PathUtils().get_type(Path(value))
-        if isinstance(value, list):
-            for i in value:
+        elif key in self.paths.keys():
+            self.paths[key] = Path(value)
+
+        else:
+            raise AttributeError("Provided key not recognized")
+
+    def set_unknown(self, value: Union[PathLike, list[PathLike]]) -> bool:
+        """
+        Set a path that you don't know the filetype off. Will append to
+        existing lists and replace non list values.
+
+        Parameters
+        ----------
+        value: unknown path to add to session
+
+        Returns bool, whether the operation was successful
+        -------
+        """
+        if not isinstance(value, list):
+            value = [value]
+
+        for i in value:
+            filetype = PathUtils().get_type(Path(i))
+            if filetype == "video":
+                self["videos"].append(Path(i))
+            elif filetype == "audio":
+                self["audios"].append(Path(i))
+            elif filetype in self.paths.keys():
                 self[filetype] = Path(i)
-            return
-        self[filetype] = Path(value)
-
-    def append_unknown(self, value: Union[PathLike, list[PathLike]]):
-        """
-        Tries to append the value to the already existing ones. Falls back
-        to set_unknown if the value cannot be appended.
-        """
-        value = Path(value)
-        filetype = PathUtils().get_type(value)
-
-        if filetype not in ["videos", "audios"]:
-            return self.set_unknown(value)
-
-        try:
-            if isinstance(value, list):
-                for i in value:
-                    self[filetype].append(i)
-                return
-            self[filetype].append(value)
-
-        except AttributeError:
-            # The value was never set / is still None
-            self.set_unknown(value)
+            else:
+                return False
+        return True
 
 
 class DatasetUtils:
@@ -187,7 +198,7 @@ class DatasetUtils:
                 raise AttributeError(f"The path {i} could not be "
                                      f"identified.")
             else:
-                sorted_files[date + "_a" + session_no].append_unknown(i)
+                sorted_files[date + "_a" + session_no].set_unknown(i)
 
         return sorted_files
 
