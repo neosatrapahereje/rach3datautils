@@ -3,121 +3,231 @@ from rach3datautils import dataset_utils
 import numpy as np
 from typing import Tuple
 from rach3datautils.backup_files import PathLike
-import partitura as pt
-from partitura.performance import Performance
+from rach3datautils.dataset_utils import Session
 import argparse as ap
 from pathlib import Path
+import scipy.spatial as sp
 
 
 def main(root_dir: PathLike,
          frame_size: int = None,
          hop_size: int = None,
-         window_size: int = 20,
-         dist_func=None):
+         window_size: int = None,
+         dist_func=None,
+         sample_rate: int = None,
+         stride: int = None,
+         search_period: int = None):
     """
     Find the timestamps corresponding to the first and last notes for each
-    mp3/flac pair. Is intended to be used with the mp3 output from
+    aac/flac pair. Is intended to be used with the aac output from
     extract_and_concat.
     """
+    if frame_size is None:
+        frame_size = 8372
+    if window_size is None:
+        window_size = 500
+    if sample_rate is None:
+        sample_rate = 44100
+    if hop_size is None:
+        hop_size = int(np.round(sample_rate * 0.0006))
+    if dist_func is None:
+        dist_func = dist_sum
+    if search_period is None:
+        search_period = 30
+    if stride is None:
+        stride = hop_size
     dataset = dataset_utils.DatasetUtils(root_path=Path(root_dir))
 
     sessions = dataset.get_sessions(["mid", "aac", "flac"])
 
-    for i in sessions:
-        _get_timestamps(i)
+    for i in sessions.values():
+        _get_timestamps(i,
+                        sample_rate=sample_rate,
+                        frame_size=frame_size,
+                        hop_size=hop_size,
+                        window_size=window_size,
+                        dist_func=dist_func,
+                        stride=stride,
+                        search_period=search_period)
 
 
-def _get_timestamps(mp3_filepath: PathLike,
-                    flac_path: PathLike,
-                    midi_path: PathLike,
-                    sample_rate: int = 44100,
-                    frame_size: int = 8372,
-                    hop_size: int = None,
-                    window_size: int = 20,
-                    dist_func=None
-                    ) -> Tuple[Tuple[int, int], Tuple[int, int]]:
+def _get_timestamps(session: Session,
+                    sample_rate: int,
+                    frame_size: int,
+                    hop_size: int,
+                    window_size: int,
+                    dist_func,
+                    stride: int,
+                    search_period: int
+                    ) -> Tuple[int, int]:
     """
     Get the timestamps for the first and last note given 2 audio files and a
     midi file.
 
+    Uses the spectrogram between the two files, and finds the most likely
+    place where the notes are.
+
     Parameters
     ----------
-    mp3_filepath: path to mp3 file
-    flac_path: path to flac file
-    midi_path: path to midi file
+    session: the session object containing at least the aac, flac, and midi
+        files
     sample_rate: the sample rate to use, should be the sample rate of the audio
-    being inputted.
+        being inputted.
     frame_size: how large one frame should be when loading the audio
-    hop_size: how far away the next window should be
+    hop_size: how far between frames in the FramedSignal
     window_size: size of window within which to compare
     dist_func: a custom distance function to be used when comparing
-    windows.
+        windows.
+    stride: how far to go between windows.
+    search_period: the period in seconds within which to search the aac file
+        at the start and end.
 
-    Returns a tuple where the first entry is a tuple containing first note
-    sample indexes, and 2nd entry contains 2nd note sample indexes. The order
-    goes mp3, flac.
+    Returns a tuple with first entry being first note time and second entry
+    being second note time.
     -------
-
     """
-    if frame_size is None:
-        frame_size = int(np.round(sample_rate * 0.05))
-    if hop_size is None:
-        hop_size = int(np.round(sample_rate * 0.005))
-    if dist_func is None:
-        dist_func = dist_sum
+    if None in [session["midi"], session["flac"], session["full_audio"]]:
+        raise AttributeError("Some files are missing from the session")
 
-    midi = pt.load_performance_midi(midi_path)
+    performance = session["performance"]
 
-    flac_signal = madmom.audio.FramedSignal(
-        flac_path,
+    flac_signal = load_signal(
+        filepath=str(session["flac"]),
         frame_size=frame_size,
         hop_size=hop_size,
         sample_rate=sample_rate,
-        num_channels=1
     )
-    mp3_signal = madmom.audio.FramedSignal(
-        flac_path,
+    aac_signal = load_signal(
+        filepath=str(session["full_audio"]),
         frame_size=frame_size,
         hop_size=hop_size,
-        sample_rate=sample_rate,
-        num_channels=1
+        sample_rate=sample_rate
     )
 
-    flac_spect = np.array(
-        madmom.audio.LogarithmicFilteredSpectrogram(flac_signal))
-    mp3_spect = np.array(
-        madmom.audio.LogarithmicFilteredSpectrogram(mp3_signal))
+    note_array = performance.note_array()
 
-    flac_frame_times = np.arrange(
-        flac_signal.num_frames) * (hop_size / sample_rate)
+    flac_frame_times = np.arange(
+        flac_signal.shape[0]) * (hop_size / sample_rate)
+    aac_frame_times = np.arange(
+        aac_signal.shape[0]) * (hop_size / sample_rate)
 
-    note_array = midi.note_array()
+    search_area = int(search_period // (hop_size / sample_rate))
 
     first_frame = abs(
         flac_frame_times - note_array["onset_sec"].min()).argmin()
     last_frame = abs(
-        flac_frame_times - note_array["onset_sec"].max()).argmax()
+        flac_frame_times - note_array["onset_sec"].max()).argmin()
 
-    first_note_window = flac_spect[
-                        first_frame - window_size: first_frame + window_size,
-                        :]
-    last_note_window = flac_spect[
-                       last_frame - window_size: last_frame + window_size, :]
+    # This is important because we're going to be splitting the signal into 2,
+    # therefore, in order to find the last frame in the 2nd half, we need to
+    # use the negative index because the regular one is wrong.
+    last_frame = -(flac_signal.shape[0] - last_frame)
 
-    mp3_start_windows = create_windows(
-        arr=mp3_spect,
-        stride=hop_size,
+    # We only need two windows from the flac, so we generate those directly.
+    first_note_window = get_log_spect_window(
+        signal=flac_signal,
+        midpoint=first_frame+window_size//2,
+        window_size=window_size
+    )
+    last_note_window = get_log_spect_window(
+        signal=flac_signal,
+        midpoint=last_frame,
+        window_size=window_size
+    )
+
+    # For the aac we need to generate many windows, so we first generate a
+    # large window, and then we'll split it later into smaller ones.
+    # We're not interested in the middle of the audio, so we're only looking
+    # at the beginning and end sections.
+    aac_spect_first = get_spect_section(
+        signal=aac_signal,
+        start=0,
+        end=search_area
+    )
+    aac_spect_last = get_spect_section(
+        signal=aac_signal,
+        start=-search_area,
+        end=aac_signal.shape[0]-1
+    )
+
+    aac_start_windows = create_windows(
+        arr=aac_spect_first,
+        stride=stride,
         window_size=window_size,
         start=0,
-        end=first_frame * 2
+        end=search_area
     )
-    mp3_end_windows = create_windows(
-        arr=mp3_spect,
-        stride=hop_size,
+    aac_end_windows = create_windows(
+        arr=aac_spect_last,
+        stride=stride,
         window_size=window_size,
-        start=last_frame - (mp3_spect.shape[1] - last_frame) * 2,
-        end=mp3_spect.shape[1]
+        start=(aac_spect_last.shape[0] - 1) - search_area,
+        end=aac_spect_last.shape[0] - 1
     )
+
+    distances = dist_func(aac_start_windows, first_note_window)
+
+    first_note_aac_window = np.argmin(distances)
+    first_note_aac_frame = first_note_aac_window * stride
+    first_note_aac_time = aac_frame_times[first_note_aac_frame]
+
+    return first_note_aac_time
+
+
+def load_signal(filepath: PathLike,
+                frame_size: int,
+                hop_size: int,
+                sample_rate: int) -> madmom.audio.signal.FramedSignal:
+    signal = madmom.audio.Signal(
+        filepath,
+        sample_rate=sample_rate,
+        num_channels=1,
+        norm=True
+    )
+    f_signal = madmom.audio.FramedSignal(
+        signal=signal,
+        frame_size=frame_size,
+        hop_size=hop_size
+    )
+
+    return f_signal
+
+
+def get_log_spect_window(signal: madmom.audio.signal.FramedSignal,
+                         midpoint: int,
+                         window_size: int,
+                         spec_func=None) -> np.ndarray:
+    """
+    Generate a window from a signal and return it as a numpy array.
+    Uses the logarithmic filtered spectrogram by default.
+    """
+    if spec_func is None:
+        spec_func = madmom.audio.LogarithmicFilteredSpectrogram
+
+    return np.array(
+        spec_func(
+            signal[midpoint - window_size // 2:
+                   midpoint + window_size // 2][:]
+        )
+    )[:, 8:47]
+
+
+def get_spect_section(signal: madmom.audio.signal.FramedSignal,
+                      start: int,
+                      end: int,
+                      spec_func=None) -> np.ndarray:
+    """
+    Generate a certain section of the log_spectrogram given start and end
+    points. Uses the logarithmic filtered spectrogram by default.
+    """
+    if spec_func is None:
+        spec_func = madmom.audio.LogarithmicFilteredSpectrogram
+
+    return np.array(
+        spec_func(
+            signal[start:end][:]
+        )
+    )[:, 8:47]
 
 
 def create_windows(arr: np.ndarray,
@@ -137,17 +247,27 @@ def create_windows(arr: np.ndarray,
     end: where to end indexing
     """
 
-    sub_window_idxs = (
+    sub_window_ids = (
             start +
             np.expand_dims(np.arange(window_size), 0) +
-            np.expand_dims(np.arange(end + 1, step=stride), 0).T
+            np.expand_dims(np.arange(
+                end - start - window_size, step=stride), 0).T
     )
 
-    return arr[sub_window_idxs]
+    return arr[sub_window_ids, :]
 
 
-def dist_sum(a: np.ndarray, b: np.ndarray) -> float:
-    return float(np.sum(np.abs(a - b)))
+def dist_sum(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    diff = np.abs(a - b)
+    sums = np.sum(diff, axis=(1, 2))
+    return sums
+
+
+def dist_cos(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    return np.apply_along_axis(a,
+                               lambda x: 1 - sp.distance.cdist(x.copy(),
+                                                               b, 'cosine'),
+                               axis=0)
 
 
 if __name__ == "__main__":
@@ -166,7 +286,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "-fs", "--frame-size",
         action="store",
-        required=True
+        required=False,
+        default=None
     )
     parser.add_argument(
         "-ws", "--window-size",
@@ -192,17 +313,28 @@ if __name__ == "__main__":
         dist_func = dist_sum
     elif args.distance_function is None:
         dist_func = dist_sum
+    else:
+        raise AttributeError("A valid distance function must be specified.")
 
     if args.hop_size is not None:
         hop_size = int(args.hop_size)
+    else:
+        hop_size = None
 
     if args.window_size is not None:
         window_size = int(args.window_size)
+    else:
+        window_size = None
+
+    if args.frame_size is not None:
+        frame_size = int(args.frame_size)
+    else:
+        frame_size = None
 
     main(
         root_dir=args.root_dir,
-        frame_size=int(args.frame_size),
-        hop_size=args.hop_size,
-        window_size=args.window_size,
+        frame_size=frame_size,
+        hop_size=hop_size,
+        window_size=window_size,
         dist_func=dist_func
     )
