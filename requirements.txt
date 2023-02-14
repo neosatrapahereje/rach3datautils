@@ -1,0 +1,10 @@
+setuptools==67.3.1
+numpy~=1.24.2
+mido~=1.2.10
+scipy~=1.10.0
+packaging~=23.0
+madmom~=0.16.1
+pytest~=7.2.1
+Cython~=0.29.33
+matplotlib==3.7.0
+partitura==1.2.1
