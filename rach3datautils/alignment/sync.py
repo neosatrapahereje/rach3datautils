@@ -25,13 +25,13 @@ def main(root_dir: PathLike,
     if frame_size is None:
         frame_size = 8372
     if window_size is None:
-        window_size = 500
+        window_size = 4200
     if sample_rate is None:
         sample_rate = 44100
     if hop_size is None:
         hop_size = int(np.round(sample_rate * 0.0006))
     if dist_func is None:
-        dist_func = dist_sum
+        dist_func = dist_cos
     if search_period is None:
         search_period = 30
     if stride is None:
@@ -46,7 +46,7 @@ def main(root_dir: PathLike,
                         frame_size=frame_size,
                         hop_size=hop_size,
                         window_size=window_size,
-                        dist_func=dist_func,
+                        _dist_func=dist_func,
                         stride=stride,
                         search_period=search_period)
 
@@ -56,7 +56,7 @@ def _get_timestamps(session: Session,
                     frame_size: int,
                     hop_size: int,
                     window_size: int,
-                    dist_func,
+                    _dist_func,
                     stride: int,
                     search_period: int
                     ) -> Tuple[int, int]:
@@ -165,7 +165,7 @@ def _get_timestamps(session: Session,
         end=aac_spect_last.shape[0] - 1
     )
 
-    distances = dist_func(aac_start_windows, first_note_window)
+    distances = _dist_func(aac_start_windows, first_note_window)
 
     first_note_aac_window = np.argmin(distances)
     first_note_aac_frame = first_note_aac_window * stride
@@ -264,10 +264,12 @@ def dist_sum(a: np.ndarray, b: np.ndarray) -> np.ndarray:
 
 
 def dist_cos(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    return np.apply_along_axis(a,
-                               lambda x: 1 - sp.distance.cdist(x.copy(),
-                                                               b, 'cosine'),
-                               axis=0)
+    b = b.flatten()
+    return np.array([sp.distance.cosine(x.flatten(), b) for x in a[:]])
+
+
+def dummy_distance(a, b):
+    return np.random.rand(a.shape[0])
 
 
 if __name__ == "__main__":
@@ -311,10 +313,8 @@ if __name__ == "__main__":
 
     if args.distance_function == "sum":
         dist_func = dist_sum
-    elif args.distance_function is None:
-        dist_func = dist_sum
     else:
-        raise AttributeError("A valid distance function must be specified.")
+        dist_func = None
 
     if args.hop_size is not None:
         hop_size = int(args.hop_size)
