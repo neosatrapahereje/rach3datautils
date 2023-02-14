@@ -8,7 +8,8 @@ import tempfile
 
 class AudioVideoTools:
     """
-    Contains useful ffmpeg pipelines for working with audio and video.
+    Contains useful ffmpeg pipelines for working with audio and video, as well
+    as other utility functions.
     """
 
     @staticmethod
