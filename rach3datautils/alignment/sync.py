@@ -38,7 +38,7 @@ def main(root_dir: PathLike,
         stride = hop_size
     dataset = dataset_utils.DatasetUtils(root_path=Path(root_dir))
 
-    sessions = dataset.get_sessions(["mid", "aac", "flac"])
+    sessions = dataset.get_sessions([".mid", ".aac", ".flac"])
 
     for i in sessions.values():
         _get_timestamps(i,
@@ -76,7 +76,7 @@ def _get_timestamps(session: Session,
     frame_size: how large one frame should be when loading the audio
     hop_size: how far between frames in the FramedSignal
     window_size: size of window within which to compare
-    dist_func: a custom distance function to be used when comparing
+    _dist_func: a custom distance function to be used when comparing
         windows.
     stride: how far to go between windows.
     search_period: the period in seconds within which to search the aac file
@@ -268,10 +268,6 @@ def dist_cos(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     return np.array([sp.distance.cosine(x.flatten(), b) for x in a[:]])
 
 
-def dummy_distance(a, b):
-    return np.random.rand(a.shape[0])
-
-
 if __name__ == "__main__":
     parser = ap.ArgumentParser(
         prog="Audio Synchronizer",
@@ -289,26 +285,31 @@ if __name__ == "__main__":
         "-fs", "--frame-size",
         action="store",
         required=False,
-        default=None
-    )
-    parser.add_argument(
-        "-ws", "--window-size",
-        action="store",
-        required=False,
-        default=None
-    )
-    parser.add_argument(
-        "-ds", "--distance-function",
-        action="store",
-        required=False,
-        default=None
+        default=None,
+        help="Frame size when loading the FramedSignal object."
     )
     parser.add_argument(
         "-hs", "--hop-size",
         action="store",
         required=False,
-        default=None
+        default=None,
+        help="Hop size to use when generating FramedSignal object"
     )
+    parser.add_argument(
+        "-ws", "--window-size",
+        action="store",
+        required=False,
+        default=None,
+        help="Window size to use when calculating distances."
+    )
+    parser.add_argument(
+        "-ds", "--distance-function",
+        action="store",
+        required=False,
+        default=None,
+        help="Distance function to use, defaults to cosine."
+    )
+
     args = parser.parse_args()
 
     if args.distance_function == "sum":
