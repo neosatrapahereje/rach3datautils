@@ -1,46 +1,33 @@
 import partitura as pt
 import argparse
 from pathlib import Path
-from .dataset_utils import DatasetUtils
-from .video_audio_tools import AudioVideoTools
+from rach3datautils.dataset_utils import DatasetUtils
+from rach3datautils.video_audio_tools import AudioVideoTools
+from rach3datautils.backup_files import PathLike
 import os
 
 
-def main(args: list[str] = None):
+def main(root_dir: PathLike,
+         output_dir: PathLike = None,
+         processed_dir: PathLike = None,
+         overwrite: bool = None):
     """
     Detect pauses in playing based on midi file, and split audio at these
     pauses. The aim is to reduce time drifting between the video file and flac
     file.
     """
-    parser = argparse.ArgumentParser(
-        prog="Midi Based Video and Audio Splitter",
-        description="Split video and audio files where there are breaks in the "
-                    "music."
-    )
+    if root_dir is None:
+        raise AttributeError("root_dir must be supplied!")
+    if output_dir is None:
+        output_dir = "./audio_split/"
+    if processed_dir is None:
+        processed_dir = "./trimmed_silence/"
+    if overwrite is None:
+        overwrite = False
 
-    parser.add_argument("-d", "--root_directory",
-                        action="store",
-                        help="Root directory of the dataset. If not set, the"
-                             "current working folder is used.",
-                        required=True)
-
-    parser.add_argument("-w", "--overwrite",
-                        action="store_true",
-                        help="Whether to overwrite the files if they already"
-                             "exist.")
-    parser.add_argument("-o", "--output_dir",
-                        action="store",
-                        help="Directory where to store output files.",
-                        default="./audio_split/")
-    parser.add_argument("-pd", "--processed_directory",
-                        action="store",
-                        help="The directory where the full mp3 files are kept."
-                             "Where the output of trim_silence.py went.",
-                        default="./trimmed_silence/")
-
-    args = parser.parse_args(args)
-    output_dir = Path(args.output_dir)
-    pd = Path(args.processed_directory)
+    output_dir = Path(output_dir)
+    pd = Path(processed_dir)
+    root_dir = Path(root_dir)
 
     if output_dir.suffix:
         raise AttributeError("output_dir must be a path to a valid directory")
@@ -56,7 +43,7 @@ def main(args: list[str] = None):
     a_d_tools = AudioVideoTools()
 
     # We are working with midi and audio files here, so lets gather those.
-    dataset = DatasetUtils(args.root_directory)
+    dataset = DatasetUtils(root_dir)
     pd_util = DatasetUtils(pd)
     all_files = [
         i for i in dataset.get_files_by_type(filetype=["mid", "flac"])
@@ -134,8 +121,38 @@ def main(args: list[str] = None):
                                    split_start=n,
                                    split_end=o,
                                    output=i[1],
-                                   overwrite=args.overwrite) for i in outputs]
+                                   overwrite=overwrite) for i in outputs]
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(
+        prog="Midi Based Video and Audio Splitter",
+        description="Split video and audio files where there are breaks in the "
+                    "music."
+    )
+
+    parser.add_argument("-d", "--root_directory",
+                        action="store",
+                        help="Root directory of the dataset. If not set, the"
+                             "current working folder is used.",
+                        required=True)
+
+    parser.add_argument("-w", "--overwrite",
+                        action="store_true",
+                        help="Whether to overwrite the files if they already"
+                             "exist.")
+    parser.add_argument("-o", "--output_dir",
+                        action="store",
+                        help="Directory where to store output files.",
+                        default="./audio_split/")
+    parser.add_argument("-pd", "--processed_directory",
+                        action="store",
+                        help="The directory where the full mp3 files are kept."
+                             "Where the output of trim_silence.py went.",
+                        default="./trimmed_silence/")
+
+    args = parser.parse_args()
+    main(root_dir=args.root_directory,
+         overwrite=args.overwrite,
+         output_dir=args.output_directory,
+         processed_dir=args.processed_directory)

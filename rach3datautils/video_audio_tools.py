@@ -2,13 +2,15 @@ import ffmpeg
 import os
 from partitura.performance import Performance
 from pathlib import Path
-from rach3datautils.misc import PathLike
+from typing import Union
+import tempfile
 
 
 class AudioVideoTools:
     """
     Contains useful ffmpeg pipelines for working with audio and video.
     """
+
     @staticmethod
     def extract_audio(filepath: Path, output: Path = None,
                       overwrite: bool = False) -> Path:
@@ -21,46 +23,51 @@ class AudioVideoTools:
         if output is None:
             output = Path(os.path.join(".", "audio_files",
                                        filepath.stem + "_audio.mp3"))
-        elif not output.suffix == ".mp4":
+        elif not output.suffix == ".aac":
             raise AttributeError("Output must either be None or a valid path "
-                                 "to a .mp4 file")
+                                 "to a .acc file")
 
         if output.is_file() and not overwrite:
             return output
 
         video = ffmpeg.input(filepath)
-        audio = video.audio
-        out = ffmpeg.output(audio, filename=output)
+        out = ffmpeg.output(video.audio, filename=output, c="copy")
         out = ffmpeg.overwrite_output(out)
         out.run()
         return output
 
     @staticmethod
-    def concat_audio(audio_files: list[PathLike], output: Path,
-                     overwrite: bool = False) -> Path:
+    def concat(files: list[Path], output: Path,
+               overwrite: bool = False) -> Path:
         """
-        Takes a list of audio files and concatenates them into one file. They
-        will be concatenated in the order present within the list.
+        Takes a list of audio or video files and concatenates them into one
+        file. They will be concatenated in the order present within the list.
         Returns path to new audio file.
         """
 
-        if not output.suffix == ".mp3":
-            raise AttributeError("Output must be a valid path to a .mp3 file")
+        if output.suffix not in [".aac", ".mp4"]:
+            raise AttributeError("Output must be a valid path to a .acc or "
+                                 ".mp4 file")
 
         # Only rewrite files if its explicitly stated
         if output.is_file() and not overwrite:
             return output
 
-        streams = []
+        streams = [str(i) for i in files if i.suffix in [".mp4", ".aac"]]
 
-        for i in audio_files:
-            ffmpeg_input = ffmpeg.input(i)
-            streams.append(ffmpeg_input)
+        tmp = tempfile.NamedTemporaryFile(mode="w",
+                                          prefix="concat_file",
+                                          suffix=".txt")
 
-        concatenated = ffmpeg.concat(*streams, v=0, a=1)
-        out = ffmpeg.output(concatenated, filename=output)
+        with open(tmp.name, "w") as f:
+            [f.write(f"file '{stream}'\n") for stream in streams]
+
+        # This is a bit of a hack, there's probably a better way to do it.
+        concatenated = ffmpeg.input(Path(f.name), f='concat', safe=0)
+        out = ffmpeg.output(concatenated, filename=output, c="copy")
         out = ffmpeg.overwrite_output(out)
         out.run()
+
         return output
 
     @staticmethod
@@ -112,9 +119,9 @@ class AudioVideoTools:
         return note_array[-1][0]
 
     @staticmethod
-    def split_audio(audio_path: PathLike, split_start: float,
-                    split_end: float, output: Path,
-                    overwrite: bool = False) -> PathLike:
+    def split_audio(audio_path: Union[Path, str], split_start: float,
+                    split_end: float, output: Union[Path, str],
+                    overwrite: bool = False) -> Union[Path, str]:
         """
         Extract a section of an audio file given start and end points.
 
@@ -140,7 +147,8 @@ class AudioVideoTools:
         out = ffmpeg.overwrite_output(out)
         out.run()
 
-    def get_len(self, audio_path: PathLike) -> float:
+    @staticmethod
+    def get_len(audio_path: Union[Path, str]) -> float:
         """
         Get the length in seconds of a media file.
 
@@ -149,16 +157,9 @@ class AudioVideoTools:
         audio_path: path to audio file
         -------
         """
-        metadata = self.ff_probe(audio_path)
+        metadata = ffmpeg.probe(audio_path)
         duration = float(metadata["format"]["duration"])
         return duration
-
-    @staticmethod
-    def ff_probe(filepath: PathLike):
-        """
-        Run a probe on a file and return the result
-        """
-        return ffmpeg.probe(filepath)
 
     @staticmethod
     def delete_files(files: list[Path]) -> None:
@@ -194,6 +195,7 @@ class AudioVideoTools:
 
         input_file = ffmpeg.input(file)
         audio = input_file.audio
+        video = input_file.video
         trimmed = audio.filter(
             "silenceremove",
             start_periods=1,

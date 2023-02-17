@@ -1,22 +1,21 @@
 import argparse as ap
-from .extract_and_concat_audio import main as extract_concat_audio
-from .split_audio import main as split_audio
-from .trim_silence import main as trim_silence
+from rach3datautils.alignment import extract_and_concat
+from rach3datautils.alignment import split_audio
+from rach3datautils.alignment import trim_silence
 from pathlib import Path
+from rach3datautils.backup_files import PathLike
+import os
 
 
-def main(args: list[str] = None):
+def main(root_dir: PathLike,
+         output_dir: PathLike = None,
+         overwrite: bool = False):
     """
     Run the preprocessing pipeline for the rach3 dataset.
-
-    Possible args are: --root_dir, --overwrite, and --output_dir
 
     Where root_dir is the root of the dataset, overwrite is whether to
     overwrite already existing files, and output_dir is where to put the
     processed files.
-
-    To specify args, supply a list like so: ['--root_dir=a_path', ...]
-    The only required argument is root_dir.
 
     The preprocessing steps are as follows:
       1. Extract audio from sessions, and concatenate it into the full session
@@ -27,9 +26,35 @@ def main(args: list[str] = None):
 
     There is one important limitation, the output (or the current working dir
     if no output dir is specified), must be within the root_dir.
-    For example: '-o root_dir/output/ -d root_dir/'
+    For example: output_dir = 'root_dir/output/' root_dir = 'root_dir/'
     """
+    if output_dir is None:
+        output_dir = './processed'
 
+    output_dir = Path(output_dir)
+
+    if not output_dir.exists():
+        os.mkdir(output_dir)
+
+    trimmed_dir = str(output_dir.joinpath("trimmed/"))
+    concat_dir = str(output_dir.joinpath("concatenated/"))
+    split_dir = str(output_dir.joinpath("split/"))
+
+    extract_and_concat.main(root_dir=root_dir,
+                            output_dir=concat_dir,
+                            overwrite=overwrite)
+    trim_silence.main(root_dir=concat_dir,
+                      output_dir=trimmed_dir,
+                      overwrite=overwrite)
+    split_audio.main(processed_dir=trimmed_dir,
+                     output_dir=split_dir,
+                     root_dir=root_dir,
+                     overwrite=overwrite)
+
+    print(f"Successfully processed files to: {output_dir.absolute()}")
+
+
+if __name__ == "__main__":
     parser = ap.ArgumentParser(
         prog="Audio Alignment Pipeline",
         description="To be used with rach3 dataset. Performs multiple steps in "
@@ -45,40 +70,12 @@ def main(args: list[str] = None):
                              'in the locations specified.')
     parser.add_argument("-o", "--output_dir", action='store',
                         help='Where to output processed files. If the directory'
-                             'does not exist, a new one will be created.',
+                             'does not exist, a new one will be created. '
+                             'Output directory must be within the input '
+                             'directory.',
                         default='./processed_audio')
 
-    args = parser.parse_args(args)
-
-    output_dir = Path(args.output_dir)
-
-    # Each function acts a little differently, so we need to cater to each
-    # individually. Mostly the functions are coded to not need much
-    # babysitting, however when the user specifies a custom output path we do
-    # need to do a little work.
-    all_args = [args_concat, args_split, args_trim] = [], [], []
-
-    if args.overwrite:
-        [i.append("-w") for i in all_args]
-
-    if args.output_dir:
-        trimmed_dir = str(output_dir.joinpath("trimmed/"))
-        concat_dir = str(output_dir.joinpath("concatenated/"))
-        split_dir = str(output_dir.joinpath("split/"))
-
-        args_trim.extend(["-o", trimmed_dir, "-d", concat_dir])
-        args_concat.extend(["-o", concat_dir, "-d", args.root_dir])
-        args_split.extend(["-pd", trimmed_dir, "-o", split_dir,
-                           "-d", args.root_dir])
-    else:
-        [i.extend(["-d", args.root_dir]) for i in all_args]
-
-    extract_concat_audio(args_concat)
-    trim_silence(args_trim)
-    split_audio(args_split)
-
-    print(f"Successfully processed files to: {args.output_dir}")
-
-
-if __name__ == "__main__":
-    main()
+    args = parser.parse_args()
+    main(output_dir=args.output_dir,
+         overwrite=args.overwrite,
+         root_dir=args.root_dir)
