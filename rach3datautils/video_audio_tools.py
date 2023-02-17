@@ -2,7 +2,6 @@ import ffmpeg
 import os
 from partitura.performance import Performance
 from pathlib import Path
-from typing import Union
 import tempfile
 from rach3datautils.misc import PathLike
 
@@ -121,7 +120,7 @@ class AudioVideoTools:
 
     @staticmethod
     def split_audio(audio_path: PathLike, split_start: float,
-                    split_end: float, output: PathLike,
+                    split_end: float, output: Path,
                     overwrite: bool = False) -> PathLike:
         """
         Extract a section of an audio file given start and end points.
