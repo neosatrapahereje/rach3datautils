@@ -2,8 +2,8 @@ import ffmpeg
 import os
 from partitura.performance import Performance
 from pathlib import Path
-from typing import Union
 import tempfile
+from rach3datautils.misc import PathLike
 
 
 class AudioVideoTools:
@@ -120,9 +120,9 @@ class AudioVideoTools:
         return note_array[-1][0]
 
     @staticmethod
-    def split_audio(audio_path: Union[Path, str], split_start: float,
-                    split_end: float, output: Union[Path, str],
-                    overwrite: bool = False) -> Union[Path, str]:
+    def split_audio(audio_path: PathLike, split_start: float,
+                    split_end: float, output: Path,
+                    overwrite: bool = False) -> PathLike:
         """
         Extract a section of an audio file given start and end points.
 
@@ -148,8 +148,7 @@ class AudioVideoTools:
         out = ffmpeg.overwrite_output(out)
         out.run()
 
-    @staticmethod
-    def get_len(audio_path: Union[Path, str]) -> float:
+    def get_len(self, audio_path: PathLike) -> float:
         """
         Get the length in seconds of a media file.
 
@@ -158,9 +157,13 @@ class AudioVideoTools:
         audio_path: path to audio file
         -------
         """
-        metadata = ffmpeg.probe(audio_path)
+        metadata = self.ff_probe(audio_path)
         duration = float(metadata["format"]["duration"])
         return duration
+
+    @staticmethod
+    def ff_probe(filepath: PathLike):
+        return ffmpeg.probe(filepath)
 
     @staticmethod
     def delete_files(files: list[Path]) -> None:
