@@ -125,11 +125,9 @@ class Session:
         midi_filepath = self.midi.full
         if midi_filepath is None:
             return
-        # TODO
-        # Dont use .file_list[0], use .full_file
-        # Change when the midi merging script is complete.
+
         self._performance = pt.load_performance_midi(
-            self.midi.file_list[0])
+            self.midi.full)
 
     def set_unknown(self, value: Union[PathLike, list[PathLike]]) -> bool:
         """
@@ -164,9 +162,22 @@ class Session:
 
             elif filetype in self.path_keys:
                 attribute: SessionFile = getattr(self, filetype[5:])
-                attribute.full_file = file
+                attribute.full = file
 
             else:
                 return False
 
         return True
+
+    def sort_flacs(self):
+        self.flac.file_list.sort(key=PathUtils.get_fileno_a)
+
+    def sort_midis(self):
+        self.midi.file_list.sort(key=PathUtils.get_fileno_a)
+
+    def sort_videos(self):
+        self.video.file_list.sort(key=PathUtils.get_fileno_p)
+
+    def sort_audios(self):
+        self.audio.file_list.sort(key=PathUtils.get_fileno_p)
+

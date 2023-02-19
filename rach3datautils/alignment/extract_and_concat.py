@@ -74,11 +74,11 @@ def _video_concat(session: Session,
     if output.exists() and not overwrite:
         return
 
-    session_files = session.video.file_list
+    session.sort_videos()
 
     # Concatenate session files into one
     AudioVideoTools.concat(
-        files=session_files,
+        files=session.video.file_list,
         output=output,
         overwrite=overwrite)
 
@@ -99,16 +99,18 @@ def _aac_concat(session: Session,
 
     # Extract audio from all videos in session before
     # concatenating them.
-    session.audio.file_list = session_files = [
+    session.audio.file_list = [
         AudioVideoTools.extract_audio(filepath=j,
                                       overwrite=overwrite,
                                       output=workdir.joinpath(
                                           j.with_suffix(".aac").name))
         for j in session.video.file_list]
 
+    session.sort_audios()
+
     # Concatenate session files into one
     AudioVideoTools.concat(
-        files=session_files,
+        files=session.audio.file_list,
         output=output,
         overwrite=overwrite)
 
@@ -124,11 +126,11 @@ def _flac_concat(session: Session,
     if output.exists() and not overwrite:
         return
 
-    session_files = session.flac.file_list
+    session.sort_flacs()
 
     # Concatenate session files into one
     AudioVideoTools.concat(
-        files=session_files,
+        files=session.flac.file_list,
         output=output,
         overwrite=overwrite)
 

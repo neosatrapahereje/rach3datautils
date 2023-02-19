@@ -77,6 +77,22 @@ class PathUtils:
 #        return file.stem.split("_")[-1] == "full" and file.suffix == ".mid"
 
     @staticmethod
+    def get_fileno_a(file: Path) -> int:
+        """
+        Get the file number for files using the a + 2 numbers format.
+        """
+        no = re.search(pattern="a\\d{2}", string=str(file)).group()
+        return int(no[-2:])
+
+    @staticmethod
+    def get_fileno_p(file: Path) -> int:
+        """
+        Get the file number for files using the p + 3 numbers format.
+        """
+        no = re.search(pattern="p\\d{3}", string=str(file)).group()
+        return int(no[-3:])
+
+    @staticmethod
     def is_trimmed(file: Path) -> bool:
         """
         Check whether a file is a trimmed audio.

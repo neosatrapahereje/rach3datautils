@@ -1,5 +1,6 @@
 import madmom
 from rach3datautils import dataset_utils
+from rach3datautils.video_audio_tools import AudioVideoTools
 import numpy as np
 from typing import Tuple
 from rach3datautils.backup_files import PathLike
@@ -7,16 +8,18 @@ from rach3datautils.dataset_utils import Session
 import argparse as ap
 from pathlib import Path
 import scipy.spatial as sp
+import multiprocessing
+from typing import Optional, List
 
 
 def main(root_dir: PathLike,
-         frame_size: int = None,
-         hop_size: int = None,
-         window_size: int = None,
-         distance_function=None,
-         sample_rate: int = None,
-         stride: int = None,
-         search_period: int = None):
+         frame_size: Optional[int] = None,
+         hop_size: Optional[int] = None,
+         window_size: Optional[int] = None,
+         distance_function: Optional = None,
+         sample_rate: Optional[int] = None,
+         stride: Optional[int] = None,
+         search_period: Optional[int] = None):
     """
     Find the timestamps corresponding to the first and last notes for each
     aac/flac pair. Is intended to be used with the aac output from
@@ -33,7 +36,7 @@ def main(root_dir: PathLike,
     if distance_function is None:
         distance_function = _cos_dist
     if search_period is None:
-        search_period = 30
+        search_period = 60
     if stride is None:
         stride = hop_size
 
@@ -41,15 +44,15 @@ def main(root_dir: PathLike,
 
     sessions = dataset.get_sessions([".mid", ".aac", ".flac"])
 
-    for i in sessions.values():
-        _get_timestamps(i,
-                        sample_rate=sample_rate,
-                        frame_size=frame_size,
-                        hop_size=hop_size,
-                        window_size=window_size,
-                        _dist_func=distance_function,
-                        stride=stride,
-                        search_period=search_period)
+    arguments = [(session, sample_rate, frame_size, hop_size, window_size,
+                  distance_function, stride, search_period) for session in
+                 sessions.values()]
+
+    with multiprocessing.Pool(processes=2) as pool:
+        timestamps: List[Tuple[str, float, float]] = pool.starmap(
+            _get_timestamps, arguments)
+
+    print(timestamps)
 
 
 def _get_timestamps(session: Session,
@@ -60,7 +63,7 @@ def _get_timestamps(session: Session,
                     _dist_func,
                     stride: int,
                     search_period: int
-                    ) -> Tuple[int, int]:
+                    ) -> Tuple[str, float, float]:
     """
     Get the timestamps for the first and last note given 2 audio files and a
     midi file.
@@ -98,42 +101,36 @@ def _get_timestamps(session: Session,
     first_note_time = note_array["onset_sec"].min()
     last_note_time = note_array["onset_sec"].max()
 
-    flac_signal_first = load_signal(
+    aac_len = AudioVideoTools().get_len(session.audio.full)
+
+    flac_signal = load_signal(
         filepath=str(session.flac.full),
         frame_size=frame_size,
         hop_size=hop_size,
         sample_rate=sample_rate,
-        start=first_note_time,
-        stop=first_note_time + window_time
     )
     aac_signal = load_signal(
         filepath=str(session.audio.full),
         frame_size=frame_size,
         hop_size=hop_size,
-        sample_rate=sample_rate
+        sample_rate=sample_rate,
     )
+
+    aac_frame_times_first = np.arange(
+        aac_signal.shape[0]) * (hop_size / sample_rate)
+    aac_frame_times_last = np.arange(aac_signal.shape[0]) * \
+        (hop_size / sample_rate) + aac_len - search_period
 
     flac_frame_times = np.arange(
         flac_signal.shape[0]) * (hop_size / sample_rate)
-    aac_frame_times = np.arange(
-        aac_signal.shape[0]) * (hop_size / sample_rate)
+
+    first_frame = abs(
+        flac_frame_times - note_array["onset_sec"].min()).argmin()
+    last_frame = abs(
+        flac_frame_times - note_array["onset_sec"].max()).argmin()
 
     search_area = int(search_period // (hop_size / sample_rate))
 
-    first_frame = abs(
-        flac_frame_times - first_note_time).argmin()
-    last_frame = abs(
-        flac_frame_times - last_note_time).argmin()
-
-    # This is important because we're going to be splitting the signal into 2,
-    # therefore, in order to find the last frame in the 2nd half, we need to
-    # use the negative index because the regular one is wrong.
-    last_frame = -(flac_signal.shape[0] - last_frame)
-
-    # We only need two windows from the flac, so we generate those directly.
-    # It's important to generate the first window with the note at the
-    # beginning, and the last window with the note at the end, because there
-    # may not be enough samples otherwise.
     first_note_window = get_log_spect_window(
         signal=flac_signal,
         midpoint=first_frame + window_size // 2,
@@ -157,7 +154,7 @@ def _get_timestamps(session: Session,
     aac_spect_last = get_spect_section(
         signal=aac_signal,
         start=-search_area,
-        end=aac_signal.shape[0]-1
+        end=aac_signal.shape[0] - 1
     )
 
     aac_start_windows = create_windows(
@@ -179,24 +176,22 @@ def _get_timestamps(session: Session,
 
     first_note_aac_window = np.argmin(distances)
     first_note_aac_frame = first_note_aac_window * stride
-    first_note_aac_time = aac_frame_times[first_note_aac_frame]
+    first_note_aac_time = aac_frame_times_first[first_note_aac_frame]
 
-    return first_note_aac_time
+    last_note_aac_time = 303.0
+
+    return session.session, first_note_aac_time, last_note_aac_time
 
 
 def load_signal(filepath: PathLike,
                 frame_size: int,
                 hop_size: int,
-                sample_rate: int,
-                start: float,
-                stop: float) -> madmom.audio.signal.FramedSignal:
+                sample_rate: int) -> madmom.audio.signal.FramedSignal:
     signal = madmom.audio.Signal(
         filepath,
         sample_rate=sample_rate,
         num_channels=1,
         norm=True,
-        start=start,
-        stop=stop
     )
     f_signal = madmom.audio.FramedSignal(
         signal=signal,
@@ -278,6 +273,10 @@ def _manhatten_dist(a: np.ndarray, b: np.ndarray) -> np.ndarray:
 
 
 def _cos_dist(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """
+    Get cos distance between two windows. Could be better optimized bit it's
+    already quite fast.
+    """
     b = b.flatten()
     return np.array([sp.distance.cosine(x.flatten(), b) for x in a[:]])
 
