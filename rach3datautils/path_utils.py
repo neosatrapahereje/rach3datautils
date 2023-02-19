@@ -3,8 +3,8 @@ from typing import Union, Literal, Tuple, get_args
 import re
 
 
-filetypes = Literal["midi", "flac", "mp4", "full_video", "video", "aac",
-                    "full_audio", "audio"]
+filetypes = Literal["midi", "full_midi", "flac", "full_flac", "mp4",
+                    "full_video", "video", "aac", "full_audio", "audio"]
 
 suffixes = Literal[".aac", ".flac", ".mp4", ".mid"]
 suffixes_list: Tuple[suffixes, ...] = get_args(suffixes)
@@ -16,15 +16,19 @@ class PathUtils:
     """
 
     def get_type(self, path: Path) -> filetypes:
-        if self.is_valid_midi(path):
+        if self.is_full_midi(path):
+            return "full_midi"
+        elif self.is_valid_midi(path):
             return "midi"
         elif self.is_full_flac(path):
+            return "full_flac"
+        elif self.is_valid_flac(path):
             return "flac"
-        elif path.suffix == "mp4":
+        elif path.suffix == ".mp4":
             if self.is_full_video(path):
                 return "full_video"
             return "video"
-        elif path.suffix == "aac":
+        elif path.suffix == ".aac":
             if self.is_full_audio(path):
                 return "full_audio"
             return "audio"
@@ -43,12 +47,14 @@ class PathUtils:
     def get_date(file: Path) -> Union[str, None]:
         """
         Get the date from a given file in format yyyy_mm_dd.
+        Raises an attribute error if a date cannot be found.
         """
         for i in file.stem.split("_"):
             if re.search(pattern="^\\d{4}-\\d{2}-\\d{2}$",
                          string=i):
                 return i
-        return None
+        raise AttributeError("Date could not be identified from the given "
+                             "file.")
 
     @staticmethod
     def is_full_audio(file: Path) -> bool:
@@ -58,6 +64,17 @@ class PathUtils:
         """
 
         return file.stem.split("_")[-1] == "full" and file.suffix == ".aac"
+
+    @staticmethod
+    def is_full_midi(file: Path) -> bool:
+        """
+        Check whether a file is a full midi file and not an individual part.
+        """
+        # TODO
+        # Currently there is no script for concatenating midi files so the
+        # return True is only until that is finished.
+        return True
+#        return file.stem.split("_")[-1] == "full" and file.suffix == ".mid"
 
     @staticmethod
     def is_trimmed(file: Path) -> bool:
@@ -74,12 +91,15 @@ class PathUtils:
         """
         return file.stem.split("_")[0] == "warmup"
 
-    @staticmethod
-    def is_full_flac(file: Path) -> bool:
+    def is_full_flac(self, file: Path) -> bool:
         """
         Check whether a file is a full flac recording of a session
         """
-        return len(file.stem.split("_")) == 3 and file.suffix == ".flac"
+        return len(file.stem.split("_")) == 3 and self.is_valid_flac(file=file)
+
+    @staticmethod
+    def is_valid_flac(file: Path) -> bool:
+        return file.suffix == ".flac"
 
     @staticmethod
     def is_valid_midi(file: Path) -> bool:
@@ -121,4 +141,5 @@ class PathUtils:
         Returns list of Path objects
         -------
         """
-        return [Path(j) for j in root.rglob('*.' + filetype)]
+        files = [Path(j) for j in root.rglob('*' + filetype)]
+        return files

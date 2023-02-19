@@ -13,7 +13,7 @@ def main(root_dir: PathLike,
          frame_size: int = None,
          hop_size: int = None,
          window_size: int = None,
-         dist_func=None,
+         distance_function=None,
          sample_rate: int = None,
          stride: int = None,
          search_period: int = None):
@@ -30,12 +30,13 @@ def main(root_dir: PathLike,
         sample_rate = 44100
     if hop_size is None:
         hop_size = int(np.round(sample_rate * 0.0006))
-    if dist_func is None:
-        dist_func = dist_cos
+    if distance_function is None:
+        distance_function = _cos_dist
     if search_period is None:
         search_period = 30
     if stride is None:
         stride = hop_size
+
     dataset = dataset_utils.DatasetUtils(root_path=Path(root_dir))
 
     sessions = dataset.get_sessions([".mid", ".aac", ".flac"])
@@ -46,7 +47,7 @@ def main(root_dir: PathLike,
                         frame_size=frame_size,
                         hop_size=hop_size,
                         window_size=window_size,
-                        _dist_func=dist_func,
+                        _dist_func=distance_function,
                         stride=stride,
                         search_period=search_period)
 
@@ -86,25 +87,31 @@ def _get_timestamps(session: Session,
     being second note time.
     -------
     """
-    if None in [session["midi"], session["flac"], session["full_audio"]]:
+    if None in [session.midi.full, session.flac.full, session.audio.full]:
         raise AttributeError("Some files are missing from the session")
 
-    performance = session["performance"]
+    performance = session.performance
+    note_array = performance.note_array()
 
-    flac_signal = load_signal(
-        filepath=str(session["flac"]),
+    window_time = window_size * (hop_size / sample_rate)
+
+    first_note_time = note_array["onset_sec"].min()
+    last_note_time = note_array["onset_sec"].max()
+
+    flac_signal_first = load_signal(
+        filepath=str(session.flac.full),
         frame_size=frame_size,
         hop_size=hop_size,
         sample_rate=sample_rate,
+        start=first_note_time,
+        stop=first_note_time + window_time
     )
     aac_signal = load_signal(
-        filepath=str(session["full_audio"]),
+        filepath=str(session.audio.full),
         frame_size=frame_size,
         hop_size=hop_size,
         sample_rate=sample_rate
     )
-
-    note_array = performance.note_array()
 
     flac_frame_times = np.arange(
         flac_signal.shape[0]) * (hop_size / sample_rate)
@@ -114,9 +121,9 @@ def _get_timestamps(session: Session,
     search_area = int(search_period // (hop_size / sample_rate))
 
     first_frame = abs(
-        flac_frame_times - note_array["onset_sec"].min()).argmin()
+        flac_frame_times - first_note_time).argmin()
     last_frame = abs(
-        flac_frame_times - note_array["onset_sec"].max()).argmin()
+        flac_frame_times - last_note_time).argmin()
 
     # This is important because we're going to be splitting the signal into 2,
     # therefore, in order to find the last frame in the 2nd half, we need to
@@ -124,14 +131,17 @@ def _get_timestamps(session: Session,
     last_frame = -(flac_signal.shape[0] - last_frame)
 
     # We only need two windows from the flac, so we generate those directly.
+    # It's important to generate the first window with the note at the
+    # beginning, and the last window with the note at the end, because there
+    # may not be enough samples otherwise.
     first_note_window = get_log_spect_window(
         signal=flac_signal,
-        midpoint=first_frame+window_size//2,
+        midpoint=first_frame + window_size // 2,
         window_size=window_size
     )
     last_note_window = get_log_spect_window(
         signal=flac_signal,
-        midpoint=last_frame,
+        midpoint=last_frame - window_size // 2,
         window_size=window_size
     )
 
@@ -177,12 +187,16 @@ def _get_timestamps(session: Session,
 def load_signal(filepath: PathLike,
                 frame_size: int,
                 hop_size: int,
-                sample_rate: int) -> madmom.audio.signal.FramedSignal:
+                sample_rate: int,
+                start: float,
+                stop: float) -> madmom.audio.signal.FramedSignal:
     signal = madmom.audio.Signal(
         filepath,
         sample_rate=sample_rate,
         num_channels=1,
-        norm=True
+        norm=True,
+        start=start,
+        stop=stop
     )
     f_signal = madmom.audio.FramedSignal(
         signal=signal,
@@ -257,13 +271,13 @@ def create_windows(arr: np.ndarray,
     return arr[sub_window_ids, :]
 
 
-def dist_sum(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+def _manhatten_dist(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     diff = np.abs(a - b)
     sums = np.sum(diff, axis=(1, 2))
     return sums
 
 
-def dist_cos(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+def _cos_dist(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     b = b.flatten()
     return np.array([sp.distance.cosine(x.flatten(), b) for x in a[:]])
 
@@ -279,63 +293,83 @@ if __name__ == "__main__":
         "-d", "--root-dir",
         action="store",
         required=True,
-        help="The root directory containing midi, flac, and mp3 files."
+        help="The root directory containing midi, flac, and mp3 files.",
+        type=str
     )
     parser.add_argument(
         "-fs", "--frame-size",
         action="store",
         required=False,
         default=None,
-        help="Frame size when loading the FramedSignal object."
+        help="Frame size when loading the FramedSignal object.",
+        type=int
     )
     parser.add_argument(
         "-hs", "--hop-size",
         action="store",
         required=False,
         default=None,
-        help="Hop size to use when generating FramedSignal object"
+        help="Hop size to use when generating FramedSignal object",
+        type=int
     )
     parser.add_argument(
         "-ws", "--window-size",
         action="store",
         required=False,
         default=None,
-        help="Window size to use when calculating distances."
+        help="Window size to use when calculating distances.",
+        type=int
     )
     parser.add_argument(
         "-ds", "--distance-function",
         action="store",
         required=False,
         default=None,
-        help="Distance function to use, defaults to cosine."
+        help="Distance function to use, defaults to cosine.",
+        type=str
+    )
+    parser.add_argument(
+        "-s", "--stride",
+        action="store",
+        required=False,
+        default=None,
+        help="How many samples to move the window center between windows.",
+        type=int
+    )
+    parser.add_argument(
+        "-sp", "--search-period",
+        action="store",
+        required=False,
+        default=None,
+        help="How many seconds at the start and end to look through, smaller "
+             "values mean faster performance and less likely to return an "
+             "incorrect result. However if the first note isn't in the search "
+             "period specified it wont be found.",
+        type=int
+    )
+    parser.add_argument(
+        "-sr", "--sample-rate",
+        action="store",
+        required=False,
+        default=None,
+        help="Sample rate to use when loading the audio files.",
+        type=int
     )
 
     args = parser.parse_args()
 
-    if args.distance_function == "sum":
-        dist_func = dist_sum
+    if args.distance_function == "manhatten":
+        dist_func = _manhatten_dist
     else:
         dist_func = None
 
-    if args.hop_size is not None:
-        hop_size = int(args.hop_size)
-    else:
-        hop_size = None
-
-    if args.window_size is not None:
-        window_size = int(args.window_size)
-    else:
-        window_size = None
-
-    if args.frame_size is not None:
-        frame_size = int(args.frame_size)
-    else:
-        frame_size = None
-
     main(
         root_dir=args.root_dir,
-        frame_size=frame_size,
-        hop_size=hop_size,
-        window_size=window_size,
-        dist_func=dist_func
+        frame_size=args.frame_size,
+        hop_size=args.hop_size,
+        window_size=args.window_size,
+        distance_function=dist_func,
+        stride=args.stride,
+        search_period=args.search_period,
+        sample_rate=args.sample_rate
     )

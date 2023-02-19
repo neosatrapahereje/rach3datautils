@@ -1,95 +1,135 @@
 from pathlib import Path
-from rach3datautils.misc import PathLike
 from rach3datautils.path_utils import PathUtils
-from typing import TypedDict, Literal, Union
+from rach3datautils.misc import PathLike
+from typing import Union, Optional, List
 from partitura.performance import Performance
 import partitura as pt
 
 
-# For the sake of type hints lets define exactly what's in a session
-class SessionDict(TypedDict, total=False):
-    videos: list[PathLike]
-    audios: list[PathLike]
-    midi: list[PathLike]
-    full_audio: PathLike
-    flac: PathLike
-    full_video: PathLike
-    full_midi: PathLike
-    performance: Performance
+class SessionFile:
+    """
+    Generic class for files that have multiple pieces and one combined version.
+    """
 
+    def __init__(self,
+                 session: Optional[str] = None,
+                 file_list: Optional[List[Optional[Path]]] = None,
+                 full_file: Optional[Path] = None):
+        if file_list is None:
+            file_list = []
 
-# I wish this wasn't necessary but TypedDict is a little more basic than I'd
-# like
-session_key_types = Literal["videos", "audios", "midi", "full_audio", "flac",
-                            "full_video", "full_midi", "performance"]
-session_item_types = Union[list[PathLike], PathLike, Performance]
+        self._file_list: List[Optional[Path]] = file_list
+        self._full: Optional[Path] = full_file
+        self.session: Optional[str] = session
+
+    @property
+    def file_list(self) -> List[Optional[Path]]:
+        return self._file_list
+
+    @file_list.setter
+    def file_list(self, value: List[Optional[PathLike]]):
+        values = [Path(i) for i in value]
+
+        if self.session is None and values:
+            self.session = PathUtils.get_date(values[0])
+
+        if len([i for i in values if PathUtils.get_date(i) == self.session]) \
+                != len(values):
+            raise AttributeError("Trying to set a file from the wrong "
+                                 "session.")
+        self._file_list = value
+
+    @property
+    def full(self) -> Path:
+        return self._full
+
+    @full.setter
+    def full(self, value: PathLike):
+        value = Path(value)
+
+        if self.session is None:
+            self.session = PathUtils.get_date(value)
+
+        if PathUtils.get_date(value) != self.session:
+            raise AttributeError("Trying to set a file from the wrong "
+                                 "session.")
+
+        self._full = value
 
 
 class Session:
     """
-    An object representing one session. Contains all files corresponding to
-    the session.
+    An object representing one session. Provides a useful abstraction from just
+    raw filepaths.
+
+    Specifically, this object:
+        - Guarantees all paths returned are Path objects
+        - Automatically loads/caches more complex objects such as a
+          Partitura Performance without any extra interaction
+        - Provides detailed type hints
+        - Makes it easy to add files without knowing what they are
+        - Checks that all files are from the same session
+        - TODO: Easily utilize various scripts from .alignment
     """
 
-    def __init__(self,
-                 videos: list[PathLike] = None,
-                 audios: list[PathLike] = None,
-                 midi: list[PathLike] = None,
-                 flac: PathLike = None,
-                 full_audio: PathLike = None,
-                 full_video: PathLike = None,
-                 full_midi: PathLike = None):
+    def __init__(self, session: Optional[str] = None,
+                 audio: Optional[SessionFile] = None,
+                 video: Optional[SessionFile] = None,
+                 midi: Optional[SessionFile] = None,
+                 flac: Optional[SessionFile] = None,
+                 performance: Optional[Performance] = None):
         """
-        Takes filepaths as input and initializes the session object.
+        Initializes session, optionally takes a custom SessionDict. The
+        session identifier is required.
         """
-        self.files: SessionDict = {}
+        if audio is None:
+            audio = SessionFile()
+        if video is None:
+            video = SessionFile()
+        if midi is None:
+            midi = SessionFile()
+        if flac is None:
+            flac = SessionFile()
 
-        if videos is not None:
-            self.files["videos"] = videos
-        if audios is not None:
-            self.files["audios"] = audios
-        if midi is not None:
-            self.files["midi"] = midi
-        if full_audio is not None:
-            self.files["full_audio"] = full_audio
-        if flac is not None:
-            self.files["flac"] = flac
-        if full_video is not None:
-            self.files["full_video"] = full_video
-        if full_midi is not None:
-            self.files["full_midi"] = full_midi
+        self.audio: SessionFile = audio
+        self.video: SessionFile = video
+        self.midi: SessionFile = midi
+        self.flac: SessionFile = flac
+        self._performance: Optional[Performance] = performance
 
-    def __getitem__(self, item: session_key_types) -> session_item_types:
+        self.session = session
+
+        self.list_path_keys = ["flac", "midi", "video", "audio"]
+        self.path_keys = ["full_midi", "full_flac", "full_video", "full_audio"]
+
+    @property
+    def performance(self) -> Performance:
         """
-        Get an item from the session. The item is loaded if it has not been
-        accessed yet.
-
-        possible items are listed in Session.paths.keys. Additionally a
-        performance can be requested which is loaded on demand from the midi
-        file.
+        Get the partitura performance object. If it does not exist it will be
+        loaded from the midi file. If the midi file has not been specified
+        an AttributeError will be raised.
         """
-        if item == "performance":
-            return self._load_midi()
+        if self._performance is None:
+            self._load_performance_from_midi()
 
-        return self.files[item]
+        return self._performance
 
-    def _load_midi(self) -> Performance:
-        if "midi" not in self.files.keys():
-            raise KeyError("No midi path found in session")
+    @performance.setter
+    def performance(self, value: Performance):
+        if not isinstance(value, Performance):
+            raise AttributeError("The given value is not a Performance "
+                                 "object.")
+        self._performance = value
 
-        elif "performance" not in self.files.keys():
-            self.files["performance"] = pt.load_performance_midi(
-                self.files["full_midi"])
-
-        return self.files["performance"]
-
-    def __setitem__(self, key: session_key_types,
-                    value: session_item_types):
-        """
-        Set an item in the session. Will overwrite old values, including
-        lists.
-        """
-        self.files[key] = value
+    def _load_performance_from_midi(self):
+        midi_filepath = self.midi.full
+        if midi_filepath is None:
+            return
+        # TODO
+        # Dont use .file_list[0], use .full_file
+        # Change when the midi merging script is complete.
+        self._performance = pt.load_performance_midi(
+            self.midi.file_list[0])
 
     def set_unknown(self, value: Union[PathLike, list[PathLike]]) -> bool:
         """
@@ -107,13 +147,26 @@ class Session:
             value = [value]
 
         for i in value:
-            filetype = PathUtils().get_type(Path(i))
-            if filetype == "video":
-                self["videos"].append(Path(i))
-            elif filetype == "audio":
-                self["audios"].append(Path(i))
-            elif filetype in self.files.keys():
-                self[filetype] = Path(i)
+            file = Path(i)
+
+            if self.session is None:
+                self.session = PathUtils.get_date(file)
+            elif PathUtils.get_date(file) != self.session:
+                raise AttributeError("The session of the file provided does "
+                                     "not match with the other files in the "
+                                     "current session.")
+
+            filetype = PathUtils().get_type(file)
+
+            if filetype in self.list_path_keys:
+                attribute: SessionFile = getattr(self, filetype)
+                attribute.file_list.append(file)
+
+            elif filetype in self.path_keys:
+                attribute: SessionFile = getattr(self, filetype[5:])
+                attribute.full_file = file
+
             else:
                 return False
+
         return True

@@ -100,12 +100,11 @@ class DatasetUtils:
 
         for i in files:
             date = PathUtils().get_date(i)
-            session_no = PathUtils().get_session_no(i)
 
-            if session_no is None or date is None:
+            if date is None:
                 raise AttributeError(f"The path {i} could not be "
                                      f"identified.")
             else:
-                sorted_files[date + "_a" + session_no].set_unknown(i)
+                sorted_files[date].set_unknown(i)
 
         return sorted_files
