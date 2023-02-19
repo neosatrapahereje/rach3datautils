@@ -1,18 +1,20 @@
 import argparse
 import tempfile
-from typing import Literal, Union
+from typing import Literal, Optional
 from rach3datautils.video_audio_tools import AudioVideoTools
 from rach3datautils.dataset_utils import DatasetUtils
 from rach3datautils.backup_files import PathLike
+from rach3datautils.session import Session
 import os
 from pathlib import Path
 
 
 def main(root_dir: PathLike,
-         output_dir: PathLike = None,
-         overwrite: bool = None,
-         audio_only: bool = None,
-         flac: bool = None):
+         output_dir: Optional[PathLike] = None,
+         overwrite: Optional[bool] = None,
+         audio: Optional[bool] = None,
+         flac: Optional[bool] = None,
+         video: Optional[bool] = None):
     """
     Script for concatenating session videos into one video per session. Can
     also extract and concatenate the audio and flac files.
@@ -23,15 +25,16 @@ def main(root_dir: PathLike,
         output_dir = './concat_audio/'
     if overwrite is None:
         overwrite = False
-    if audio_only is None:
+    if audio is None:
         audio_only = False
     if flac is None:
         flac = False
+    if video is None:
+        video = True
 
     output = Path(output_dir)
     root_dir = Path(root_dir)
     data_utils = DatasetUtils(root_path=root_dir)
-    a_d_tools = AudioVideoTools()
 
     # Check if the output dir exists, and if not create a new one
     if output.suffix:
@@ -47,52 +50,96 @@ def main(root_dir: PathLike,
 
     files = data_utils.get_sessions(filetype=filetypes)
 
-    # Use a temporary working directory for audio files if extracting them.
-    if audio_only:
-        tempdir = tempfile.TemporaryDirectory()
-        workdir = tempdir.name
+    for session in files.values():
+        if audio:
+            _aac_concat(session,
+                        output.joinpath(session.session + "_full.aac"),
+                        overwrite)
+        if video:
+            _video_concat(session,
+                          output.joinpath(session.session + "_full.mp4"),
+                          overwrite)
+        if flac:
+            _flac_concat(session,
+                         output.joinpath(session.session + "_full.flac"),
+                         overwrite)
 
-    else:
-        workdir = root_dir
 
-    for s, i in files.items():
-        # Create the path to the output file based on name of current
-        # session.
-        if audio_only:
-            output_path = output.joinpath(s + "_full.aac")
-        else:
-            output_path = output.joinpath(s + "_full.mp4")
+def _video_concat(session: Session,
+                  output: Path,
+                  overwrite: Optional[bool] = None):
+    if overwrite is None:
+        overwrite = False
 
-        if output_path.exists() and not overwrite:
-            continue
+    if output.exists() and not overwrite:
+        return
 
-        if audio_only:
-            # Extract audio from all videos in session
-            session_files = [
-                a_d_tools.extract_audio(filepath=j,
-                                        overwrite=overwrite,
-                                        output=workdir.joinpath(
-                                            j.with_suffix(".aac").name))
-                for j in i["videos"]]
-        else:
-            session_files = i["videos"]
+    session_files = session.video.file_list
 
-        # Concatenate session files into one
-        a_d_tools.concat(
-            files=session_files,
-            output=output_path,
-            overwrite=overwrite)
+    # Concatenate session files into one
+    AudioVideoTools.concat(
+        files=session_files,
+        output=output,
+        overwrite=overwrite)
 
-        if audio_only:
-            # Delete unnecessary audio files generated during middle step.
-            AudioVideoTools.delete_files(session_files)
+    session.video.full = output
+
+
+def _aac_concat(session: Session,
+                output: Path,
+                overwrite: Optional[bool] = None):
+    if overwrite is None:
+        overwrite = False
+
+    if output.exists() and not overwrite:
+        return
+
+    tempdir = tempfile.TemporaryDirectory()
+    workdir: Path = Path(tempdir.name)
+
+    # Extract audio from all videos in session before
+    # concatenating them.
+    session.audio.file_list = session_files = [
+        AudioVideoTools.extract_audio(filepath=j,
+                                      overwrite=overwrite,
+                                      output=workdir.joinpath(
+                                          j.with_suffix(".aac").name))
+        for j in session.video.file_list]
+
+    # Concatenate session files into one
+    AudioVideoTools.concat(
+        files=session_files,
+        output=output,
+        overwrite=overwrite)
+
+    session.audio.full = output
+
+
+def _flac_concat(session: Session,
+                 output: Path,
+                 overwrite: Optional[bool] = None):
+    if overwrite is None:
+        overwrite = False
+
+    if output.exists() and not overwrite:
+        return
+
+    session_files = session.flac.file_list
+
+    # Concatenate session files into one
+    AudioVideoTools.concat(
+        files=session_files,
+        output=output,
+        overwrite=overwrite)
+
+    session.flac.full = output
 
 
 if __name__ == "__main__":
     # Let's set up some argument parsing for ease of use.
     parser = argparse.ArgumentParser(
         prog="Extract audio/video and concatenate",
-        description="Take a folder containing one or more complete sesions "
+        description="Take a folder containing one or more complete sessions "
                     "and combine all the sub-videos and audios into 1 session "
                     "video or audio.")
 
@@ -108,12 +155,20 @@ if __name__ == "__main__":
                              'directory does not exist, a new one will be '
                              'created.',
                         default='./concat/')
-    parser.add_argument("-a", "--audio-only", action="store_true",
+    parser.add_argument("-a", "--audio", action="store_true",
                         help="Whether to output only the audio.")
+
+    parser.add_argument("-f", "--flac", action="store_true",
+                        help="Whether to concatenate the flac files.")
+
+    parser.add_argument("-v", "--video", action="store_true",
+                        help="Whether to concatenate the video files.")
 
     args = parser.parse_args()
 
     main(root_dir=args.root_directory,
          output_dir=args.output_dir,
          overwrite=args.overwrite,
-         audio_only=args.audio_only)
+         audio=args.audio,
+         flac=args.flac,
+         video=args.video)

@@ -4,6 +4,8 @@ from partitura.performance import Performance
 from pathlib import Path
 import tempfile
 from rach3datautils.misc import PathLike
+from typing import Optional
+import shutil
 
 
 class AudioVideoTools:
@@ -11,7 +13,6 @@ class AudioVideoTools:
     Contains useful ffmpeg pipelines for working with audio and video, as well
     as other utility functions.
     """
-
     @staticmethod
     def extract_audio(filepath: Path, output: Path = None,
                       overwrite: bool = False) -> Path:
@@ -38,15 +39,24 @@ class AudioVideoTools:
         return output
 
     @staticmethod
-    def concat(files: list[Path], output: Path,
-               overwrite: bool = False) -> Path:
+    def concat(files: list[Optional[Path]], output: Path,
+               overwrite: Optional[bool] = None) -> Optional[Path]:
         """
         Takes a list of audio or video files and concatenates them into one
         file. They will be concatenated in the order present within the list.
         Returns path to new audio file.
+        If only one file is given, it will simply be copied to the output
+        location.
         """
+        if overwrite is None:
+            overwrite = False
+        if not files:
+            return
+        if len(files) == 1:
+            shutil.copy(files[0], output)
+            return output
 
-        if output.suffix not in [".aac", ".mp4"]:
+        if output.suffix not in [".aac", ".mp4", ".flac"]:
             raise AttributeError("Output must be a valid path to a .acc or "
                                  ".mp4 file")
 

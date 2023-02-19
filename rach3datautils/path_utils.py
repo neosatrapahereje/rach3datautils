@@ -71,9 +71,9 @@ class PathUtils:
         Check whether a file is a full midi file and not an individual part.
         """
         # TODO
-        # Currently there is no script for concatenating midi files so the
-        # return True is only until that is finished.
-        return True
+        # Currently there is no script for concatenating midi files so all
+        # are considered full.
+        return file.suffix == ".mid"
 #        return file.stem.split("_")[-1] == "full" and file.suffix == ".mid"
 
     @staticmethod
@@ -95,7 +95,9 @@ class PathUtils:
         """
         Check whether a file is a full flac recording of a session
         """
-        return len(file.stem.split("_")) == 3 and self.is_valid_flac(file=file)
+        return len(file.stem.split("_")) == 2 and \
+            self.is_valid_flac(file=file) and \
+            file.stem.split("_")[-1] == "full"
 
     @staticmethod
     def is_valid_flac(file: Path) -> bool:
