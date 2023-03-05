@@ -13,7 +13,6 @@ def main(root_dir: PathLike,
          output_dir: Optional[PathLike] = None,
          overwrite: Optional[bool] = None,
          audio: Optional[bool] = None,
-         flac: Optional[bool] = None,
          video: Optional[bool] = None):
     """
     Script for concatenating session videos into one video per session. Can
@@ -27,8 +26,6 @@ def main(root_dir: PathLike,
         overwrite = False
     if audio is None:
         audio_only = False
-    if flac is None:
-        flac = False
     if video is None:
         video = True
 
@@ -42,27 +39,20 @@ def main(root_dir: PathLike,
     elif not output.exists():
         os.mkdir(output)
 
-    # First we get a list of all the video files.
-    if flac:
-        filetypes: list[Literal[".mp4", ".flac"]] = [".mp4", ".flac"]
-    else:
-        filetypes: list[Literal[".mp4"]] = [".mp4"]
+    filetypes: list[Literal[".mp4"]] = [".mp4"]
 
-    files = data_utils.get_sessions(filetype=filetypes)
+    sessions = data_utils.get_sessions(filetype=filetypes)
 
-    for session in files.values():
+    for session in sessions:
         if audio:
             _aac_concat(session,
-                        output.joinpath(session.session + "_full.aac"),
+                        output.joinpath(str(session.id) +
+                                        "_full.aac"),
                         overwrite)
         if video:
             _video_concat(session,
-                          output.joinpath(session.session + "_full.mp4"),
+                          output.joinpath(str(session.id) + "_full.mp4"),
                           overwrite)
-        if flac:
-            _flac_concat(session,
-                         output.joinpath(session.session + "_full.flac"),
-                         overwrite)
 
 
 def _video_concat(session: Session,
@@ -82,7 +72,7 @@ def _video_concat(session: Session,
         output=output,
         overwrite=overwrite)
 
-    session.video.full = output
+    session.video.file = output
 
 
 def _aac_concat(session: Session,
@@ -114,63 +104,50 @@ def _aac_concat(session: Session,
         output=output,
         overwrite=overwrite)
 
-    session.audio.full = output
-
-
-def _flac_concat(session: Session,
-                 output: Path,
-                 overwrite: Optional[bool] = None):
-    if overwrite is None:
-        overwrite = False
-
-    if output.exists() and not overwrite:
-        return
-
-    session.sort_flacs()
-
-    # Concatenate session files into one
-    AudioVideoTools.concat(
-        files=session.flac.file_list,
-        output=output,
-        overwrite=overwrite)
-
-    session.flac.full = output
+    session.audio.file = output
 
 
 if __name__ == "__main__":
-    # Let's set up some argument parsing for ease of use.
     parser = argparse.ArgumentParser(
         prog="Extract audio/video and concatenate",
         description="Take a folder containing one or more complete sessions "
                     "and combine all the sub-videos and audios into 1 session "
-                    "video or audio.")
-
-    parser.add_argument("-d", "--root_directory", action='store',
-                        help='The root directory where the dataset is '
-                             'located. All folders and subfolders in this '
-                             'directory will be searched.')
-    parser.add_argument("-w", "--overwrite", action='store_true',
-                        help='If the concatenated files exist already, '
-                             'whether to overwrite them.')
-    parser.add_argument("-o", "--output_dir", action='store',
-                        help='Where to output processed files. If the '
-                             'directory does not exist, a new one will be '
-                             'created.',
-                        default='./concat/')
-    parser.add_argument("-a", "--audio", action="store_true",
-                        help="Whether to output only the audio.")
-
-    parser.add_argument("-f", "--flac", action="store_true",
-                        help="Whether to concatenate the flac files.")
-
-    parser.add_argument("-v", "--video", action="store_true",
-                        help="Whether to concatenate the video files.")
+                    "video or audio."
+    )
+    parser.add_argument(
+        "-d", "--root_directory",
+        action='store',
+        help='The root directory where the dataset is '
+             'located. All folders and subfolders in this '
+             'directory will be searched.'
+    )
+    parser.add_argument(
+        "-w", "--overwrite", action='store_true',
+        help='If the concatenated files exist already, '
+             'whether to overwrite them.'
+    )
+    parser.add_argument(
+        "-o", "--output_dir", action='store',
+        help='Where to output processed files. If the '
+             'directory does not exist, a new one will be '
+             'created.',
+        default='./concat/'
+    )
+    parser.add_argument(
+        "-a", "--audio", action="store_true",
+        help="Whether to output only the audio."
+    )
+    parser.add_argument(
+        "-v", "--video", action="store_true",
+        help="Whether to concatenate the video files."
+    )
 
     args = parser.parse_args()
 
-    main(root_dir=args.root_directory,
-         output_dir=args.output_dir,
-         overwrite=args.overwrite,
-         audio=args.audio,
-         flac=args.flac,
-         video=args.video)
+    main(
+        root_dir=args.root_directory,
+        output_dir=args.output_dir,
+        overwrite=args.overwrite,
+        audio=args.audio,
+        video=args.video
+    )

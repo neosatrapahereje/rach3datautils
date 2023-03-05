@@ -1,26 +1,83 @@
 from pathlib import Path
 from rach3datautils.path_utils import PathUtils
 from rach3datautils.misc import PathLike
-from typing import Union, Optional, List
+from rach3datautils.exceptions import IdentityError
+from typing import Union, Optional, List, Tuple, Literal
 from partitura.performance import Performance
 import partitura as pt
 
 
+full_session_id = Tuple[str, str]
+session_file_types = Literal["multi", "single"]
+
+
+class SessionIdentity:
+    """
+    Handles session identity storage and identity checks for files. All files
+    from the same session should have the same session identity.
+    """
+
+    def __init__(self):
+        self.date: Optional[str] = None
+        self.subsession_no: Optional[str] = None
+        # Full ID is useful when doing ID comparisons to avoid having to
+        # compare all the variables individually.
+        self.full_id: Optional[full_session_id] = None
+
+    def __str__(self):
+        return "_".join([str(i) for i in self.full_id])
+
+    @staticmethod
+    def get_file_identity(file: Path) -> full_session_id:
+        """
+        Returns the identity of a file in the form (date, subsession_no)
+        """
+
+        date = PathUtils.get_date(file)
+        subsession_no = PathUtils.get_session_no(file)
+
+        return date, subsession_no
+
+    def check_identity(self, file: Path) -> bool:
+        """
+        Check if the identity of a file matches with the currently set one.
+        If no identity has been set it will be set based on the given file.
+
+        Raises IdentityError if the identity does not match the stored one.
+        """
+        file_id = self.get_file_identity(file)
+
+        if self.full_id is None:
+            self.full_id = file_id
+
+        if file_id != self.full_id:
+            raise IdentityError("Trying to set a file from the wrong "
+                                "session.")
+
+        return True
+
+
 class SessionFile:
     """
-    Generic class for files that have multiple pieces and one combined version.
+    Generic class representing either a single file, or a group of files that
+    represent a single recording filetype.
+
+    Can group together files that may have multiple pieces, such that you can
+    access the files as a list, or the single concatenated file as a filepath.
+    Can also be used to store single files.
+
+    Checks when a property is set whether it's valid. Also makes sure all paths
+    are Path objects.
     """
 
     def __init__(self,
-                 session: Optional[str] = None,
-                 file_list: Optional[List[Optional[Path]]] = None,
-                 full_file: Optional[Path] = None):
-        if file_list is None:
-            file_list = []
+                 identity: SessionIdentity,
+                 file_type: session_file_types):
 
-        self._file_list: List[Optional[Path]] = file_list
-        self._full: Optional[Path] = full_file
-        self.session: Optional[str] = session
+        self.id: SessionIdentity = identity
+        self.type: str = file_type
+        self._file_list: List[Optional[Path]] = []
+        self._file: Optional[Path] = None
 
     @property
     def file_list(self) -> List[Optional[Path]]:
@@ -28,33 +85,29 @@ class SessionFile:
 
     @file_list.setter
     def file_list(self, value: List[Optional[PathLike]]):
+        if self.type != "multi":
+            return
+
         values = [Path(i) for i in value]
+        if not values:
+            return
 
-        if self.session is None and values:
-            self.session = PathUtils.get_date(values[0])
-
-        if len([i for i in values if PathUtils.get_date(i) == self.session]) \
-                != len(values):
-            raise AttributeError("Trying to set a file from the wrong "
-                                 "session.")
+        [self.id.check_identity(i) for i in values]
         self._file_list = value
 
     @property
-    def full(self) -> Path:
-        return self._full
+    def file(self) -> Path:
+        return self._file
 
-    @full.setter
-    def full(self, value: PathLike):
+    @file.setter
+    def file(self, value: Optional[PathLike]):
+        if value is None:
+            self._file = None
+            return
+
         value = Path(value)
-
-        if self.session is None:
-            self.session = PathUtils.get_date(value)
-
-        if PathUtils.get_date(value) != self.session:
-            raise AttributeError("Trying to set a file from the wrong "
-                                 "session.")
-
-        self._full = value
+        self.id.check_identity(value)
+        self._file = value
 
 
 class Session:
@@ -69,11 +122,11 @@ class Session:
         - Provides detailed type hints
         - Makes it easy to add files without knowing what they are
         - Checks that all files are from the same session
-        - TODO: Easily utilize various scripts from .alignment
     """
+    LIST_PATH_KEYS = ["video", "audio"]
+    PATH_KEYS = ["full_midi", "full_flac", "full_video", "full_audio"]
 
-    def __init__(self, session: Optional[str] = None,
-                 audio: Optional[SessionFile] = None,
+    def __init__(self, audio: Optional[SessionFile] = None,
                  video: Optional[SessionFile] = None,
                  midi: Optional[SessionFile] = None,
                  flac: Optional[SessionFile] = None,
@@ -82,25 +135,22 @@ class Session:
         Initializes session, optionally takes a custom SessionDict. The
         session identifier is required.
         """
+        self.id = SessionIdentity()
+
         if audio is None:
-            audio = SessionFile()
+            audio = SessionFile(self.id, file_type="multi")
         if video is None:
-            video = SessionFile()
+            video = SessionFile(self.id, file_type="multi")
         if midi is None:
-            midi = SessionFile()
+            midi = SessionFile(self.id, file_type="single")
         if flac is None:
-            flac = SessionFile()
+            flac = SessionFile(self.id, file_type="single")
 
         self.audio: SessionFile = audio
         self.video: SessionFile = video
         self.midi: SessionFile = midi
         self.flac: SessionFile = flac
         self._performance: Optional[Performance] = performance
-
-        self.session = session
-
-        self.list_path_keys = ["flac", "midi", "video", "audio"]
-        self.path_keys = ["full_midi", "full_flac", "full_video", "full_audio"]
 
     @property
     def performance(self) -> Performance:
@@ -114,20 +164,13 @@ class Session:
 
         return self._performance
 
-    @performance.setter
-    def performance(self, value: Performance):
-        if not isinstance(value, Performance):
-            raise AttributeError("The given value is not a Performance "
-                                 "object.")
-        self._performance = value
-
     def _load_performance_from_midi(self):
-        midi_filepath = self.midi.full
+        midi_filepath = self.midi.file
         if midi_filepath is None:
             return
 
         self._performance = pt.load_performance_midi(
-            self.midi.full)
+            self.midi.file)
 
     def set_unknown(self, value: Union[PathLike, list[PathLike]]) -> bool:
         """
@@ -146,38 +189,23 @@ class Session:
 
         for i in value:
             file = Path(i)
-
-            if self.session is None:
-                self.session = PathUtils.get_date(file)
-            elif PathUtils.get_date(file) != self.session:
-                raise AttributeError("The session of the file provided does "
-                                     "not match with the other files in the "
-                                     "current session.")
-
+            self.id.check_identity(file)
             filetype = PathUtils().get_type(file)
 
-            if filetype in self.list_path_keys:
+            if filetype in self.LIST_PATH_KEYS:
                 attribute: SessionFile = getattr(self, filetype)
                 attribute.file_list.append(file)
 
-            elif filetype in self.path_keys:
+            elif filetype in self.PATH_KEYS:
                 attribute: SessionFile = getattr(self, filetype[5:])
-                attribute.full = file
+                attribute.file = file
 
             else:
                 return False
-
         return True
-
-    def sort_flacs(self):
-        self.flac.file_list.sort(key=PathUtils.get_fileno_a)
-
-    def sort_midis(self):
-        self.midi.file_list.sort(key=PathUtils.get_fileno_a)
 
     def sort_videos(self):
         self.video.file_list.sort(key=PathUtils.get_fileno_p)
 
     def sort_audios(self):
         self.audio.file_list.sort(key=PathUtils.get_fileno_p)
-

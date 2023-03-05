@@ -2,17 +2,22 @@ import madmom
 from rach3datautils import dataset_utils
 from rach3datautils.video_audio_tools import AudioVideoTools
 import numpy as np
-from typing import Tuple
+from typing import Tuple, Optional, List
 from rach3datautils.backup_files import PathLike
 from rach3datautils.dataset_utils import Session
 import argparse as ap
 from pathlib import Path
 import scipy.spatial as sp
-import multiprocessing
-from typing import Optional, List
+from timeit import default_timer as timer
+import csv
+
+
+# (session ID, first note, last note)
+timestamps = Tuple[str, float, float]
 
 
 def main(root_dir: PathLike,
+         output_file: Optional[PathLike] = None,
          frame_size: Optional[int] = None,
          hop_size: Optional[int] = None,
          window_size: Optional[int] = None,
@@ -21,49 +26,47 @@ def main(root_dir: PathLike,
          stride: Optional[int] = None,
          search_period: Optional[int] = None):
     """
-    Find the timestamps corresponding to the first and last notes for each
-    aac/flac pair. Is intended to be used with the aac output from
-    extract_and_concat.
+    Wrapper function for get_timestamps that handles loading files and saving
+    output to a file if specified.
     """
-    if frame_size is None:
-        frame_size = 8372
-    if window_size is None:
-        window_size = 4200
-    if sample_rate is None:
-        sample_rate = 44100
-    if hop_size is None:
-        hop_size = int(np.round(sample_rate * 0.0006))
-    if distance_function is None:
-        distance_function = _cos_dist
-    if search_period is None:
-        search_period = 60
-    if stride is None:
-        stride = hop_size
-
     dataset = dataset_utils.DatasetUtils(root_path=Path(root_dir))
 
     sessions = dataset.get_sessions([".mid", ".aac", ".flac"])
 
-    arguments = [(session, sample_rate, frame_size, hop_size, window_size,
-                  distance_function, stride, search_period) for session in
-                 sessions.values()]
+    timestamps_list: List[timestamps] = []
+    for i in sessions:
+        timestamps_list.append(
+            get_timestamps(
+                subsession=i,
+                sample_rate=sample_rate,
+                frame_size=frame_size,
+                hop_size=hop_size,
+                window_size=window_size,
+                _dist_func=distance_function,
+                stride=stride,
+                search_period=search_period
+            )
+        )
 
-    with multiprocessing.Pool(processes=2) as pool:
-        timestamps: List[Tuple[str, float, float]] = pool.starmap(
-            _get_timestamps, arguments)
+    if output_file is None:
+        print(timestamps_list)
+        return
 
-    print(timestamps)
+    with open(output_file, "w") as f:
+        csv_writer = csv.writer(f)
+        csv_writer.writerow(["session_id", "first_note", "last_note"])
+        csv_writer.writerows(timestamps_list)
 
 
-def _get_timestamps(session: Session,
-                    sample_rate: int,
-                    frame_size: int,
-                    hop_size: int,
-                    window_size: int,
-                    _dist_func,
-                    stride: int,
-                    search_period: int
-                    ) -> Tuple[str, float, float]:
+def get_timestamps(subsession: Session,
+                   sample_rate: Optional[int] = None,
+                   frame_size: Optional[int] = None,
+                   hop_size: Optional[int] = None,
+                   window_size: Optional[int] = None,
+                   _dist_func = None,
+                   stride: Optional[int] = None,
+                   search_period: Optional[int] = None
+                   ) -> timestamps:
     """
     Get the timestamps for the first and last note given 2 audio files and a
     midi file.
@@ -73,7 +76,7 @@ def _get_timestamps(session: Session,
 
     Parameters
     ----------
-    session: the session object containing at least the aac, flac, and midi
+    subsession: the session object containing at least the aac, flac, and midi
         files
     sample_rate: the sample rate to use, should be the sample rate of the audio
         being inputted.
@@ -90,27 +93,40 @@ def _get_timestamps(session: Session,
     being second note time.
     -------
     """
-    if None in [session.midi.full, session.flac.full, session.audio.full]:
+    if frame_size is None:
+        frame_size = 8372
+    if window_size is None:
+        window_size = 4200
+    if sample_rate is None:
+        sample_rate = 44100
+    if hop_size is None:
+        hop_size = int(np.round(sample_rate * 0.002))
+    if _dist_func is None:
+        _dist_func = _cos_dist
+    if search_period is None:
+        search_period = 30
+    if stride is None:
+        stride = hop_size
+
+    if None in [subsession.midi.file, subsession.flac.file,
+                subsession.audio.file]:
         raise AttributeError("Some files are missing from the session")
 
-    performance = session.performance
+    performance = subsession.performance
+
     note_array = performance.note_array()
 
-    window_time = window_size * (hop_size / sample_rate)
-
-    first_note_time = note_array["onset_sec"].min()
-    last_note_time = note_array["onset_sec"].max()
-
-    aac_len = AudioVideoTools().get_len(session.audio.full)
+    aac_len = AudioVideoTools().get_len(subsession.audio.file)
 
     flac_signal = load_signal(
-        filepath=str(session.flac.full),
+        filepath=str(subsession.flac.file),
         frame_size=frame_size,
         hop_size=hop_size,
         sample_rate=sample_rate,
     )
+
     aac_signal = load_signal(
-        filepath=str(session.audio.full),
+        filepath=str(subsession.audio.file),
         frame_size=frame_size,
         hop_size=hop_size,
         sample_rate=sample_rate,
@@ -136,6 +152,7 @@ def _get_timestamps(session: Session,
         midpoint=first_frame + window_size // 2,
         window_size=window_size
     )
+
     last_note_window = get_log_spect_window(
         signal=flac_signal,
         midpoint=last_frame - window_size // 2,
@@ -156,7 +173,6 @@ def _get_timestamps(session: Session,
         start=-search_area,
         end=aac_signal.shape[0] - 1
     )
-
     aac_start_windows = create_windows(
         arr=aac_spect_first,
         stride=stride,
@@ -172,15 +188,18 @@ def _get_timestamps(session: Session,
         end=aac_spect_last.shape[0] - 1
     )
 
-    distances = _dist_func(aac_start_windows, first_note_window)
+    first_distances = _dist_func(aac_start_windows, first_note_window)
+    last_distances = _dist_func(aac_end_windows, last_note_window)
 
-    first_note_aac_window = np.argmin(distances)
+    first_note_aac_window = np.argmin(first_distances)
     first_note_aac_frame = first_note_aac_window * stride
     first_note_aac_time = aac_frame_times_first[first_note_aac_frame]
 
-    last_note_aac_time = 303.0
+    last_note_aac_window = np.argmin(last_distances)
+    last_note_aac_frame = last_note_aac_window * stride
+    last_note_aac_time = aac_frame_times_last[last_note_aac_frame]
 
-    return session.session, first_note_aac_time, last_note_aac_time
+    return str(subsession.id), first_note_aac_time, last_note_aac_time
 
 
 def load_signal(filepath: PathLike,
@@ -354,6 +373,15 @@ if __name__ == "__main__":
         help="Sample rate to use when loading the audio files.",
         type=int
     )
+    parser.add_argument(
+        "-o", "--output-file",
+        action="store",
+        required=False,
+        default=None,
+        help="Where to store outputs as csv, if not set will just print the "
+             "results.",
+        type=str
+    )
 
     args = parser.parse_args()
 
@@ -370,5 +398,6 @@ if __name__ == "__main__":
         distance_function=dist_func,
         stride=args.stride,
         search_period=args.search_period,
-        sample_rate=args.sample_rate
+        sample_rate=args.sample_rate,
+        output_file=args.output_file
     )

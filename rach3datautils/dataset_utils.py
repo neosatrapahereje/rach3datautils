@@ -1,7 +1,7 @@
 from pathlib import Path
 from collections import defaultdict
-from typing import Union, Literal
-from rach3datautils.session import Session
+from typing import Union, Literal, List
+from rach3datautils.session import Session, SessionIdentity
 from rach3datautils.path_utils import PathUtils, suffixes_list, suffixes
 from rach3datautils.misc import PathLike
 
@@ -71,15 +71,13 @@ class DatasetUtils:
             PathUtils.get_date(file_1) == PathUtils.get_date(file_2)
 
     def get_sessions(self,
-                     filetype: valid_input_filetypes = None) -> \
-            defaultdict[str, Session]:
+                     filetype: valid_input_filetypes = None) -> List[Session]:
         """
         Returns a dictionary with all dates and sessions. Each key is one
         session.
 
         Can optionally specify what filetype/s you want.
         """
-
         if filetype is None:
             filetype = "*"
 
@@ -89,22 +87,20 @@ class DatasetUtils:
         return sessions
 
     @staticmethod
-    def sort_by_date_and_session(files: list[Path]) -> \
-            defaultdict[str, Session]:
+    def sort_by_date_and_session(files: list[Path]) -> List[Session]:
         """
-        Take a list of files and return a dictionary of form
-        dict[date_session] = session_object
+        Take a list of files and sort them into Session objects.
         """
 
         sorted_files = defaultdict(Session)
 
         for i in files:
-            date = PathUtils().get_date(i)
+            session_id = SessionIdentity.get_file_identity(i)
 
-            if date is None:
+            if [j for j in session_id if j is None]:
                 raise AttributeError(f"The path {i} could not be "
                                      f"identified.")
             else:
-                sorted_files[date].set_unknown(i)
+                sorted_files[session_id].set_unknown(i)
 
-        return sorted_files
+        return list(sorted_files.values())

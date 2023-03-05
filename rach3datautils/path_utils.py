@@ -16,14 +16,10 @@ class PathUtils:
     """
 
     def get_type(self, path: Path) -> filetypes:
-        if self.is_full_midi(path):
+        if self.is_valid_midi(path):
             return "full_midi"
-        elif self.is_valid_midi(path):
-            return "midi"
-        elif self.is_full_flac(path):
-            return "full_flac"
         elif self.is_valid_flac(path):
-            return "flac"
+            return "full_flac"
         elif path.suffix == ".mp4":
             if self.is_full_video(path):
                 return "full_video"
@@ -36,11 +32,11 @@ class PathUtils:
     @staticmethod
     def get_session_no(file: Path) -> Union[str, None]:
         """
-        Get the session number from a given file in the format 01, 02, etc.
+        Get the session number from a given file in the format a01, a02, etc.
         """
         for i in file.stem.split("_"):
             if re.search(pattern="(^a|^v)\\d\\d$", string=i):
-                return i[-2:]
+                return "a"+i[-2:]
         return None
 
     @staticmethod
@@ -64,17 +60,6 @@ class PathUtils:
         """
 
         return file.stem.split("_")[-1] == "full" and file.suffix == ".aac"
-
-    @staticmethod
-    def is_full_midi(file: Path) -> bool:
-        """
-        Check whether a file is a full midi file and not an individual part.
-        """
-        # TODO
-        # Currently there is no script for concatenating midi files so all
-        # are considered full.
-        return file.suffix == ".mid"
-#        return file.stem.split("_")[-1] == "full" and file.suffix == ".mid"
 
     @staticmethod
     def get_fileno_a(file: Path) -> int:
@@ -107,14 +92,6 @@ class PathUtils:
         """
         return file.stem.split("_")[0] == "warmup"
 
-    def is_full_flac(self, file: Path) -> bool:
-        """
-        Check whether a file is a full flac recording of a session
-        """
-        return len(file.stem.split("_")) == 2 and \
-            self.is_valid_flac(file=file) and \
-            file.stem.split("_")[-1] == "full"
-
     @staticmethod
     def is_valid_flac(file: Path) -> bool:
         return file.suffix == ".flac"
@@ -124,9 +101,6 @@ class PathUtils:
         """
         Check if a midi file is valid.
         """
-        split_len = len(file.stem.split("_"))
-        if split_len != 3:
-            return False
         if not file.suffix == ".mid":
             return False
         return True
