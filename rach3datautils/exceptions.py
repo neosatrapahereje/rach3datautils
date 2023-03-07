@@ -5,3 +5,11 @@ class IdentityError(Exception):
     identity.
     """
     ...
+
+
+class MissingSubsessionFilesError(Exception):
+    """
+    Raised when there are files missing from a subsession that are expected
+    to be there.
+    """
+    ...

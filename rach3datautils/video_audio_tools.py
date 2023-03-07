@@ -227,3 +227,27 @@ class AudioVideoTools:
         out = ffmpeg.output(trimmed, filename=output)
         out = ffmpeg.overwrite_output(out)
         out.run()
+
+    @staticmethod
+    def extract_section(file: PathLike,
+                        output_file: PathLike,
+                        start: float,
+                        end: float
+                        ):
+        """
+        Extract a section from a video given start and end points. Will
+        overwrite files.
+        Parameters
+        ----------
+        output_file: Where to output new section
+        file: the path to the video
+        start: the timestamp where to start the section from
+        end: the timestamp for where to end the section
+
+        Returns None
+        -------
+        """
+        ffmpeg_in = ffmpeg.input(file, ss=start)
+        out = ffmpeg_in.output(filename=output_file, to=end-start, c="copy")
+        out = ffmpeg.overwrite_output(out)
+        out.run()

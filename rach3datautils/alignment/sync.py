@@ -1,6 +1,6 @@
 import madmom
 from rach3datautils import dataset_utils
-from rach3datautils.video_audio_tools import AudioVideoTools
+from rach3datautils.exceptions import MissingSubsessionFilesError
 import numpy as np
 from typing import Tuple, Optional, List
 from rach3datautils.backup_files import PathLike
@@ -8,7 +8,6 @@ from rach3datautils.dataset_utils import Session
 import argparse as ap
 from pathlib import Path
 import scipy.spatial as sp
-from timeit import default_timer as timer
 import csv
 
 
@@ -27,7 +26,7 @@ def main(root_dir: PathLike,
          search_period: Optional[int] = None):
     """
     Wrapper function for get_timestamps that handles loading files and saving
-    output to a file if specified.
+    output to a file if specified. Useful when running this file as a script.
     """
     dataset = dataset_utils.DatasetUtils(root_path=Path(root_dir))
 
@@ -63,7 +62,7 @@ def get_timestamps(subsession: Session,
                    frame_size: Optional[int] = None,
                    hop_size: Optional[int] = None,
                    window_size: Optional[int] = None,
-                   _dist_func = None,
+                   _dist_func=None,
                    stride: Optional[int] = None,
                    search_period: Optional[int] = None
                    ) -> timestamps:
@@ -96,27 +95,27 @@ def get_timestamps(subsession: Session,
     if frame_size is None:
         frame_size = 8372
     if window_size is None:
-        window_size = 4200
+        window_size = 2000
     if sample_rate is None:
         sample_rate = 44100
     if hop_size is None:
-        hop_size = int(np.round(sample_rate * 0.002))
+        hop_size = int(np.round(sample_rate * 0.005))
     if _dist_func is None:
         _dist_func = _cos_dist
     if search_period is None:
-        search_period = 30
+        search_period = 60
     if stride is None:
-        stride = hop_size
+        stride = 15
 
-    if None in [subsession.midi.file, subsession.flac.file,
-                subsession.audio.file]:
-        raise AttributeError("Some files are missing from the session")
+    if [i for i in [subsession.midi.file, subsession.flac.file,
+                    subsession.audio.file] if i is None]:
+        raise MissingSubsessionFilesError(
+            "Some files are missing from the session"
+        )
 
     performance = subsession.performance
 
     note_array = performance.note_array()
-
-    aac_len = AudioVideoTools().get_len(subsession.audio.file)
 
     flac_signal = load_signal(
         filepath=str(subsession.flac.file),
@@ -124,7 +123,6 @@ def get_timestamps(subsession: Session,
         hop_size=hop_size,
         sample_rate=sample_rate,
     )
-
     aac_signal = load_signal(
         filepath=str(subsession.audio.file),
         frame_size=frame_size,
@@ -132,13 +130,13 @@ def get_timestamps(subsession: Session,
         sample_rate=sample_rate,
     )
 
-    aac_frame_times_first = np.arange(
-        aac_signal.shape[0]) * (hop_size / sample_rate)
-    aac_frame_times_last = np.arange(aac_signal.shape[0]) * \
-        (hop_size / sample_rate) + aac_len - search_period
+    aac_frame_times = np.arange(
+        aac_signal.shape[0]
+    ) * (hop_size / sample_rate)
 
     flac_frame_times = np.arange(
-        flac_signal.shape[0]) * (hop_size / sample_rate)
+        flac_signal.shape[0]
+    ) * (hop_size / sample_rate)
 
     first_frame = abs(
         flac_frame_times - note_array["onset_sec"].min()).argmin()
@@ -147,12 +145,14 @@ def get_timestamps(subsession: Session,
 
     search_area = int(search_period // (hop_size / sample_rate))
 
+    # The first window is generated from the first note on
     first_note_window = get_log_spect_window(
         signal=flac_signal,
         midpoint=first_frame + window_size // 2,
         window_size=window_size
     )
-
+    # The last window is generated up to the last note
+    # This is in order to avoid index errors.
     last_note_window = get_log_spect_window(
         signal=flac_signal,
         midpoint=last_frame - window_size // 2,
@@ -165,27 +165,21 @@ def get_timestamps(subsession: Session,
     # at the beginning and end sections.
     aac_spect_first = get_spect_section(
         signal=aac_signal,
-        start=0,
         end=search_area
     )
     aac_spect_last = get_spect_section(
         signal=aac_signal,
-        start=-search_area,
-        end=aac_signal.shape[0] - 1
+        start=-search_area
     )
     aac_start_windows = create_windows(
         arr=aac_spect_first,
         stride=stride,
         window_size=window_size,
-        start=0,
-        end=search_area
     )
     aac_end_windows = create_windows(
         arr=aac_spect_last,
         stride=stride,
         window_size=window_size,
-        start=(aac_spect_last.shape[0] - 1) - search_area,
-        end=aac_spect_last.shape[0] - 1
     )
 
     first_distances = _dist_func(aac_start_windows, first_note_window)
@@ -193,11 +187,13 @@ def get_timestamps(subsession: Session,
 
     first_note_aac_window = np.argmin(first_distances)
     first_note_aac_frame = first_note_aac_window * stride
-    first_note_aac_time = aac_frame_times_first[first_note_aac_frame]
+    first_note_aac_time = aac_frame_times[first_note_aac_frame]
 
     last_note_aac_window = np.argmin(last_distances)
-    last_note_aac_frame = last_note_aac_window * stride
-    last_note_aac_time = aac_frame_times_last[last_note_aac_frame]
+    last_note_aac_frame = last_note_aac_window * stride + window_size
+    last_note_aac_time = aac_frame_times[
+        aac_frame_times.shape[0]-search_area + last_note_aac_frame
+    ]
 
     return str(subsession.id), first_note_aac_time, last_note_aac_time
 
@@ -241,13 +237,18 @@ def get_log_spect_window(signal: madmom.audio.signal.FramedSignal,
 
 
 def get_spect_section(signal: madmom.audio.signal.FramedSignal,
-                      start: int,
-                      end: int,
+                      start: Optional[int] = None,
+                      end: Optional[int] = None,
                       spec_func=None) -> np.ndarray:
     """
     Generate a certain section of the log_spectrogram given start and end
     points. Uses the logarithmic filtered spectrogram by default.
+    If start/end points are none then the entire signal is used.
     """
+    if start is None:
+        start = 0
+    if end is None:
+        end = signal.shape[0]
     if spec_func is None:
         spec_func = madmom.audio.LogarithmicFilteredSpectrogram
 
@@ -261,11 +262,13 @@ def get_spect_section(signal: madmom.audio.signal.FramedSignal,
 def create_windows(arr: np.ndarray,
                    stride: int,
                    window_size: int,
-                   start: int,
-                   end: int) -> np.ndarray:
+                   start: Optional[int] = None,
+                   end: Optional[int] = None
+                   ) -> np.ndarray:
     """
     Create views into a given array corresponding to a sliding window.
-
+    If no start or end is given, then the start/end of the given array is
+    used.
     Parameters
     ----------
     arr: array to be indexed
@@ -274,6 +277,10 @@ def create_windows(arr: np.ndarray,
     start: where to start indexing
     end: where to end indexing
     """
+    if start is None:
+        start = 0
+    if end is None:
+        end = arr.shape[0]
 
     sub_window_ids = (
             start +

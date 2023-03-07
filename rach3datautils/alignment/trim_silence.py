@@ -1,84 +1,109 @@
+from typing import Optional, List, Dict
 import argparse
 from rach3datautils.dataset_utils import DatasetUtils
 from rach3datautils.video_audio_tools import AudioVideoTools
 from rach3datautils.backup_files import PathLike
+from rach3datautils.session import Session
+from rach3datautils.alignment.sync import get_timestamps
+from rach3datautils.exceptions import MissingSubsessionFilesError
 from pathlib import Path
-import os
 
 
-def main(root_dir: PathLike = None,
-         output_dir: PathLike = None,
-         overwrite: bool = None):
+def main(root_dir: PathLike,
+         output_dir: PathLike,
+         overwrite: Optional[bool]):
     """
-    Remove silence at start and end of all given video/audio files.
+    Wrapper for the trim function that handles loading all files from a given
+    root directory and applying trim to them. Will use the defaults present in
+    get_timestamps.
     """
-    if root_dir is None:
-        root_dir = "./concat_audio/"
-    if output_dir is None:
-        output_dir = "./trimmed_silence/"
     if overwrite is None:
         overwrite = False
 
-    root_dir = Path(root_dir)
     output_dir = Path(output_dir)
-    dataset_utils = DatasetUtils(root_dir)
-    a_v_tools = AudioVideoTools()
-
     if output_dir.suffix:
-        raise AttributeError("output_dir must be a valid path to a directory")
-    elif not output_dir.exists():
-        os.mkdir(output_dir)
+        raise AttributeError("Output directory should not have a suffix as "
+                             "it is a directory.")
 
-    # Gather all full audio and flac files
-    all_files = [i for i in dataset_utils.get_files_by_type(
-        ["mp3", "flac"]) if dataset_utils.is_full_audio(i)
-                 or dataset_utils.is_full_flac(i)
-                 or dataset_utils.is_full_video(i)
-                 ]
+    dataset = DatasetUtils(root_path=root_dir)
 
-    # Apply trim function to all the files.
-    for i in all_files:
-        # add _trimmed to the end of the file.
-        output_path = output_dir.joinpath(i.stem+"_trimmed"+i.suffix)
+    subsessions = dataset.get_sessions(filetype=[".aac", ".flac", ".mp4",
+                                                 ".mid"])
 
-        if output_path.exists() and not overwrite:
+    fail_list: List[Session] = []
+    for i in subsessions:
+        output_file = output_dir.joinpath(str(i.id) + "_trimmed.mp4")
+        if output_file.exists() and not overwrite:
             continue
 
-        if i.suffix == ".flac":
-            # The flac files are quieter than the mp3, so we need a lower
-            # threshold.
-            threshold = -60
-        else:
-            threshold = -21
+        try:
+            trim(subsession=i,
+                 output_file=output_file)
 
-        a_v_tools.trim_silence(file=i,
-                               output=output_path,
-                               overwrite=overwrite,
-                               threshold=threshold)
+        except MissingSubsessionFilesError:
+            fail_list.append(i)
+
+    if fail_list:
+        print("Trimming failed for following files:\n",
+              [i.id for i in fail_list])
+
+
+def trim(subsession: Session,
+         output_file: PathLike,
+         padding: Optional[float] = None,
+         get_timestamps_args: Optional[Dict] = None):
+    """
+    Trim the silence from the start and end of a video based on given
+    midi and flac files and output to the output file specified.
+    """
+    if get_timestamps_args is None:
+        get_timestamps_args = {}
+    if padding is None:
+        padding = 1.
+
+    required = [subsession.audio.file, subsession.flac.file,
+                subsession.midi.file, subsession.video.file]
+
+    if [i for i in required if i is None]:
+        raise MissingSubsessionFilesError(
+            "Session must have the full audio, video, flac, "
+            "and midi present."
+        )
+
+    timestamps = get_timestamps(subsession=subsession,
+                                **get_timestamps_args)
+
+    AudioVideoTools.extract_section(file=subsession.video.file,
+                                    output_file=output_file,
+                                    start=timestamps[1]-padding,
+                                    end=timestamps[2]+padding)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         prog="Silence Trimmer",
-        description="Trim silence at start and end of all videos in dataset."
+        description="Trim silence at start and end of all videos in dataset "
+                    "based on note detection from midi/flac files."
     )
-
-    parser.add_argument("-d", "--root_directory",
-                        action="store",
-                        help="Root directory where the audio files are stored. "
-                             "If not set './concat_audio is used.",
-                        default="./concat_audio/")
-
-    parser.add_argument("-w", "--overwrite",
-                        action="store_true",
-                        help="Whether to overwrite the trimmed files if they"
-                             "already exist")
-
-    parser.add_argument("-o", "--output_directory",
-                        action="store",
-                        help="Folder where the output should go.",
-                        default="./trimmed_silence/")
-
+    parser.add_argument(
+        "-d", "--root_directory",
+        action="store",
+        help="Root directory where the dataset files are "
+             "stored.",
+        required=True
+    )
+    parser.add_argument(
+        "-w", "--overwrite",
+        action="store_true",
+        help="Whether to overwrite the trimmed files if they"
+             "already exist"
+    )
+    parser.add_argument(
+        "-o", "--output_directory",
+        action="store",
+        help="Folder where the output should go.",
+        required=True
+    )
     args = parser.parse_args()
     main(root_dir=args.root_directory,
          output_dir=args.output_directory,
