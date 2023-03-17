@@ -79,6 +79,7 @@ class SessionFile:
         self.type: str = file_type
         self._file_list: List[Optional[Path]] = []
         self._file: Optional[Path] = None
+        self._trimmed: Optional[Path] = None
 
     @property
     def file_list(self) -> List[Optional[Path]]:
@@ -109,6 +110,20 @@ class SessionFile:
         value = Path(value)
         self.id.check_identity(value)
         self._file = value
+
+    @property
+    def trimmed(self) -> Path:
+        return self._trimmed
+
+    @trimmed.setter
+    def trimmed(self, value: Optional[PathLike]):
+        if value is None:
+            self._trimmed = None
+            return
+
+        value = Path(value)
+        self.id.check_identity(value)
+        self._trimmed = value
 
 
 class Session:
@@ -193,6 +208,9 @@ class Session:
             file = Path(i)
             self.id.check_identity(file)
             filetype = PathUtils().get_type(file)
+
+            if filetype == "trimmed_video":
+                self.video.trimmed = file
 
             if filetype in self.LIST_PATH_KEYS:
                 attribute: SessionFile = getattr(self, filetype)

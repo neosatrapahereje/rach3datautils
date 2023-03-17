@@ -4,7 +4,8 @@ import re
 
 
 filetypes = Literal["midi", "full_midi", "flac", "full_flac", "mp4",
-                    "full_video", "video", "aac", "full_audio", "audio"]
+                    "full_video", "video", "aac", "full_audio", "audio",
+                    "trimmed_video"]
 
 suffixes = Literal[".aac", ".flac", ".mp4", ".mid"]
 suffixes_list: Tuple[suffixes, ...] = get_args(suffixes)
@@ -16,11 +17,16 @@ class PathUtils:
     """
 
     def get_type(self, path: Path) -> filetypes:
+        # TODO:
+        # Instead of returning the filetype as a string, its much better
+        # to return the list of tags the file has ("video", "full", "trimmed").
         if self.is_valid_midi(path):
             return "full_midi"
         elif self.is_valid_flac(path):
             return "full_flac"
         elif path.suffix == ".mp4":
+            if self.is_trimmed(path):
+                return "trimmed_video"
             if self.is_full_video(path):
                 return "full_video"
             return "video"

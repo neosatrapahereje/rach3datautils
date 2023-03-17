@@ -251,3 +251,28 @@ class AudioVideoTools:
         out = ffmpeg_in.output(filename=output_file, to=end-start, c="copy")
         out = ffmpeg.overwrite_output(out)
         out.run()
+
+    @staticmethod
+    def get_decoded_duration(file: PathLike) -> float:
+        """
+        Get the duration of a file by decoding its audio. This will yield more
+        accurate results than get_len.
+        Returns length in seconds
+        """
+        ffmpeg_in = ffmpeg.input(file).audio
+        out = ffmpeg_in.output(filename="-", f='null')
+        ffmpeg_return = out.run(capture_stderr=True)[1]
+
+        # Parsing the output to get the time
+        encode_out = ffmpeg_return.split(b"\n")[46].split(b"\r")
+        encode_sub = encode_out[-1].split(b" ")
+        encode_sub.reverse()
+        time = []
+        for i in encode_sub:
+            if b"time=" in i:
+                time = str(i)[7:-1].split(":")
+                break
+
+        time = sum([j * float(i) for i, j in zip(time, [60*60, 60, 1])])
+
+        return time

@@ -9,6 +9,7 @@ import argparse as ap
 from pathlib import Path
 import scipy.spatial as sp
 import csv
+from tqdm import tqdm
 
 
 # (session ID, first note, last note)
@@ -16,6 +17,7 @@ timestamps = Tuple[str, float, float]
 
 
 def main(root_dir: PathLike,
+         notes_index: Optional[Tuple[int, int]] = None,
          output_file: Optional[PathLike] = None,
          frame_size: Optional[int] = None,
          hop_size: Optional[int] = None,
@@ -33,18 +35,13 @@ def main(root_dir: PathLike,
     sessions = dataset.get_sessions([".mid", ".aac", ".flac"])
 
     timestamps_list: List[timestamps] = []
-    for i in sessions:
+    for i in tqdm(sessions):
         timestamps_list.append(
-            get_timestamps(
-                subsession=i,
-                sample_rate=sample_rate,
-                frame_size=frame_size,
-                hop_size=hop_size,
-                window_size=window_size,
-                _dist_func=distance_function,
-                stride=stride,
-                search_period=search_period
-            )
+            get_timestamps(subsession=i, notes_index=notes_index,
+                           sample_rate=sample_rate, frame_size=frame_size,
+                           hop_size=hop_size, window_size=window_size,
+                           _dist_func=distance_function, stride=stride,
+                           search_period=search_period)
         )
 
     if output_file is None:
@@ -58,13 +55,15 @@ def main(root_dir: PathLike,
 
 
 def get_timestamps(subsession: Session,
+                   notes_index: Optional[Tuple[int, int]] = None,
                    sample_rate: Optional[int] = None,
                    frame_size: Optional[int] = None,
                    hop_size: Optional[int] = None,
                    window_size: Optional[int] = None,
                    _dist_func=None,
                    stride: Optional[int] = None,
-                   search_period: Optional[int] = None
+                   search_period: Optional[int] = None,
+                   start_end_times: Optional[Tuple[float, float]] = None
                    ) -> timestamps:
     """
     Get the timestamps for the first and last note given 2 audio files and a
@@ -75,8 +74,12 @@ def get_timestamps(subsession: Session,
 
     Parameters
     ----------
+    start_end_times: To save time on processing, optionally provide the times
+        for the first and last notes in the aac file.
+    notes_index: A tuple containing indexes of first and last note of the
+        section to sync. Defaults to first and last notes (0, -1).
     subsession: the session object containing at least the aac, flac, and midi
-        files
+        files.
     sample_rate: the sample rate to use, should be the sample rate of the audio
         being inputted.
     frame_size: how large one frame should be when loading the audio
@@ -103,9 +106,11 @@ def get_timestamps(subsession: Session,
     if _dist_func is None:
         _dist_func = _cos_dist
     if search_period is None:
-        search_period = 60
+        search_period = 120
     if stride is None:
-        stride = 15
+        stride = 1
+    if notes_index is None:
+        notes_index = (0, -1)
 
     if [i for i in [subsession.midi.file, subsession.flac.file,
                     subsession.audio.file] if i is None]:
@@ -114,7 +119,6 @@ def get_timestamps(subsession: Session,
         )
 
     performance = subsession.performance
-
     note_array = performance.note_array()
 
     flac_signal = load_signal(
@@ -138,21 +142,30 @@ def get_timestamps(subsession: Session,
         flac_signal.shape[0]
     ) * (hop_size / sample_rate)
 
+    if start_end_times is None:
+        start_end_times = (0, flac_frame_times[-1])
+
     first_frame = abs(
-        flac_frame_times - note_array["onset_sec"].min()).argmin()
+        flac_frame_times - note_array["onset_sec"][notes_index[0]]).argmin()
     last_frame = abs(
-        flac_frame_times - note_array["onset_sec"].max()).argmin()
+        flac_frame_times - note_array["onset_sec"][notes_index[1]]).argmin()
+
+    if last_frame - first_frame < window_size:
+        raise IndexError("Window size is larger than the given section length."
+                         " Either reduce the window size, provide a longer "
+                         "section, or reduce the hop size.")
 
     search_area = int(search_period // (hop_size / sample_rate))
 
-    # The first window is generated from the first note on
+    # The first window is generated from the first note on to avoid index
+    # errors with the start of the file
     first_note_window = get_log_spect_window(
         signal=flac_signal,
         midpoint=first_frame + window_size // 2,
         window_size=window_size
     )
     # The last window is generated up to the last note
-    # This is in order to avoid index errors.
+    # This is in order to avoid index errors when hitting the end of the file
     last_note_window = get_log_spect_window(
         signal=flac_signal,
         midpoint=last_frame - window_size // 2,
@@ -163,13 +176,35 @@ def get_timestamps(subsession: Session,
     # large window, and then we'll split it later into smaller ones.
     # We're not interested in the middle of the audio, so we're only looking
     # at the beginning and end sections.
+    start_time_first = max(
+        start_end_times[0] - search_period / 2, 0
+    )
+    start_time_first_frame = abs(
+        aac_frame_times - start_time_first).argmin()
+
+    end_time_first = start_end_times[0] + search_period / 2
+    end_time_first_frame = abs(
+        aac_frame_times - end_time_first).argmin()
+
+    start_time_last = start_end_times[1] - search_period / 2
+    start_time_last_frame = abs(
+        aac_frame_times - start_time_last).argmin()
+
+    end_time_last = min(
+        start_end_times[1] + search_period / 2, aac_frame_times[-1]
+    )
+    end_time_last_frame = abs(
+        aac_frame_times - end_time_last).argmin()
+
     aac_spect_first = get_spect_section(
         signal=aac_signal,
-        end=search_area
+        start=start_time_first_frame,
+        end=end_time_first_frame
     )
     aac_spect_last = get_spect_section(
         signal=aac_signal,
-        start=-search_area
+        start=start_time_last_frame,
+        end=end_time_last_frame
     )
     aac_start_windows = create_windows(
         arr=aac_spect_first,
@@ -389,7 +424,14 @@ if __name__ == "__main__":
              "results.",
         type=str
     )
-
+    parser.add_argument(
+        "-ns", "--notes-index",
+        action="store",
+        required=False,
+        default=None,
+        help="What notes to look for, defaults to first and last.",
+        type=str
+    )
     args = parser.parse_args()
 
     if args.distance_function == "manhatten":
@@ -399,6 +441,7 @@ if __name__ == "__main__":
 
     main(
         root_dir=args.root_dir,
+        notes_index=args.notes_index,
         frame_size=args.frame_size,
         hop_size=args.hop_size,
         window_size=args.window_size,

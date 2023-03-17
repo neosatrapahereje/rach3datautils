@@ -70,8 +70,7 @@ def trim(subsession: Session,
             "and midi present."
         )
 
-    timestamps = get_timestamps(subsession=subsession,
-                                **get_timestamps_args)
+    timestamps = get_timestamps(subsession=subsession, **get_timestamps_args)
 
     AudioVideoTools.extract_section(file=subsession.video.file,
                                     output_file=output_file,
