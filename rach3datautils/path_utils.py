@@ -100,7 +100,7 @@ class PathUtils:
 
     @staticmethod
     def is_valid_flac(file: Path) -> bool:
-        return file.suffix == ".flac"
+        return file.suffix == ".flac" and file.stem.split("_")[-1][0] == "a"
 
     @staticmethod
     def is_valid_midi(file: Path) -> bool:
@@ -120,9 +120,8 @@ class PathUtils:
             return False
 
         split = file.stem.split("_")
-        if "full" in split:
-            return True
-        return False
+
+        return split[-1] == "full"
 
     @staticmethod
     def get_files_by_type(root: Path,

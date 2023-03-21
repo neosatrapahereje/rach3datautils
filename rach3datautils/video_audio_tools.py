@@ -4,7 +4,7 @@ from partitura.performance import Performance
 from pathlib import Path
 import tempfile
 from rach3datautils.misc import PathLike
-from typing import Optional
+from typing import Optional, Union, overload, Literal
 import shutil
 
 
@@ -82,21 +82,42 @@ class AudioVideoTools:
         return output
 
     @staticmethod
-    def find_breaks(midi: Performance, length: float = 10) -> \
+    @overload
+    def find_breaks(
+            midi: Performance, length: float,
+            return_notes: Literal[True]) -> list[tuple[int, int]]:
+        ...
+
+    @staticmethod
+    @overload
+    def find_breaks(
+            midi: Performance, length: float,
+            return_notes: Optional[Literal[False]] = None) -> \
             list[tuple[float, float]]:
+        ...
+
+    @staticmethod
+    def find_breaks(midi: Performance,
+                    length: float,
+                    return_notes: Optional[bool] = None) -> \
+            list[Union[tuple[float, float], tuple[int, int]]]:
         """
         Take a midi performance partitura object and find spots where nothing
         was played for the period of time specified.
 
         returns a list of tuples, where a tuple contains the start and end time
-        of the break section.
+        of the break section. If return_notes is True, then it returns the
+        note numbers instead of the timestamps.
 
         Parameters
         ----------
+        return_notes: bool, whether to return the note indexes instead of times
         midi: the midi performance object
         length: how many seconds nothing was played
         -------
         """
+        if return_notes is None:
+            return_notes = False
 
         note_array = midi.note_array()
         if len(note_array.shape) != 1:
@@ -105,11 +126,16 @@ class AudioVideoTools:
 
         breaks = []
         prev_time = note_array[0][0]
-        for i in note_array:
+        prev_note = 0
+        for no, i in enumerate(note_array):
             time = i[0]
             if time - prev_time > length:
-                breaks.append((prev_time, time))
+                if return_notes:
+                    breaks.append((prev_note, no))
+                else:
+                    breaks.append((prev_time, time))
             prev_time = time
+            prev_note = no
 
         return breaks
 
@@ -209,7 +235,7 @@ class AudioVideoTools:
 
         input_file = ffmpeg.input(file)
         audio = input_file.audio
-        video = input_file.video
+
         trimmed = audio.filter(
             "silenceremove",
             start_periods=1,

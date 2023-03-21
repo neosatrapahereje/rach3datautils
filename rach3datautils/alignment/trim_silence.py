@@ -4,7 +4,7 @@ from rach3datautils.dataset_utils import DatasetUtils
 from rach3datautils.video_audio_tools import AudioVideoTools
 from rach3datautils.backup_files import PathLike
 from rach3datautils.session import Session
-from rach3datautils.alignment.sync import get_timestamps
+from rach3datautils.alignment.sync import timestamps_spec
 from rach3datautils.exceptions import MissingSubsessionFilesError
 from pathlib import Path
 
@@ -70,7 +70,7 @@ def trim(subsession: Session,
             "and midi present."
         )
 
-    timestamps = get_timestamps(subsession=subsession, **get_timestamps_args)
+    timestamps = timestamps_spec(subsession=subsession, **get_timestamps_args)
 
     AudioVideoTools.extract_section(file=subsession.video.file,
                                     output_file=output_file,

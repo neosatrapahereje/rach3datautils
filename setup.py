@@ -12,11 +12,11 @@ KEYWORDS = ""
 URL = "https://github.com/neosatrapahereje/rach3datautils"
 EMAIL = "carloscancinochacon@gmail.com"
 AUTHOR = "Carlos Cancino-Chacón"
-REQUIRES_PYTHON = ">=3.6"
+REQUIRES_PYTHON = ">=3.9"
 VERSION = "0.0.1"
 
 # Required packages
-REQUIRED = ["partitura", "ffmpeg-python"]
+REQUIRED = ["partitura", "ffmpeg-python", "tqdm", "numpy", "madmom", "scipy"]
 
 # Optional
 EXTRAS = {}

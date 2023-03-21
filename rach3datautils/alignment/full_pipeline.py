@@ -1,6 +1,6 @@
 import argparse as ap
 from rach3datautils.alignment import extract_and_concat
-from rach3datautils.alignment import split_audio
+from rach3datautils.alignment import split
 from rach3datautils.alignment import trim_silence
 from pathlib import Path
 from rach3datautils.backup_files import PathLike

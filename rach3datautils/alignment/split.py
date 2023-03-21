@@ -7,7 +7,13 @@ from rach3datautils.exceptions import MissingSubsessionFilesError
 from rach3datautils.video_audio_tools import AudioVideoTools
 from rach3datautils.backup_files import PathLike
 from rach3datautils.session import Session
+from rach3datautils.alignment.sync import timestamps_spec
 import os
+import numpy as np
+
+
+timestamps = Tuple[float, float]
+note_sections = Tuple[int, int]
 
 
 def main(root_dir: PathLike,
@@ -27,7 +33,8 @@ def main(root_dir: PathLike,
         os.mkdir(output_dir)
 
     dataset = DatasetUtils(root_dir)
-    subsessions = dataset.get_sessions(filetype=[".mid", ".mp4", ".flac"])
+    subsessions = dataset.get_sessions(filetype=[".mid", ".mp4", ".flac",
+                                                 ".aac"])
 
     for i in subsessions:
         split_video_and_flac(
@@ -41,7 +48,6 @@ def split_video_and_flac(
         subsession: Session,
         output_dir: PathLike,
         overwrite: Optional[bool] = None,
-        pad_size: Optional[float] = None,
         break_size: Optional[float] = None,
 ):
     """
@@ -49,8 +55,6 @@ def split_video_and_flac(
     """
     if overwrite is None:
         overwrite = False
-    if pad_size is None:
-        pad_size = 1.
 
     required = [subsession.midi.file, subsession.video.trimmed,
                 subsession.flac.file]
@@ -62,24 +66,16 @@ def split_video_and_flac(
         output_dir: Path = Path(output_dir)
 
     midi = subsession.performance
-    video = subsession.video.trimmed
+    video = subsession.video.file
     flac = subsession.flac.file
 
-    duration_flac = AudioVideoTools().get_len(flac)
-    first_note_time = AudioVideoTools.get_first_time(midi)
-    last_note_time = AudioVideoTools.get_last_time(midi)
-
-    splits_vid = get_split_points(
-        midi=midi,
-        file_duration=AudioVideoTools.get_decoded_duration(video),
-        pad_left=pad_size,
-        pad_right=pad_size,
+    splits_vid = Splits().get_split_points_sync(
+        session=subsession,
+        break_size=break_size
     )
-    splits_flac = get_split_points(
+    splits_flac = Splits().get_split_points(
         midi=midi,
-        file_duration=duration_flac,
-        pad_left=first_note_time,
-        pad_right=duration_flac-last_note_time,
+        break_size=break_size
     )
     split_at_timestamps(
         splits=splits_vid,
@@ -95,77 +91,160 @@ def split_video_and_flac(
     )
 
 
-def get_split_points(
-        midi: Performance,
-        file_duration: float,
-        pad_left: float,
-        pad_right: float,
-        break_size: Optional[Union[float, int]] = None
-) -> List[Tuple[float, float]]:
+class Splits:
     """
-    Calculate splits for a file according to midi timestamps. Splits in the
-    second half will have their timestamps calculated from the right of the
-    file, and splits in the first half will have their timestamps calculated
-    from the left side of the file.
-
-    Parameters
-    ----------
-    file_duration: duration of file to calculate split points for
-    midi: midi file to use when identifying breaks
-    pad_left: amount of silence before first note at the start
-    pad_right: amount of silence after the last note
-    break_size: how much time is considered a break
-
-    Returns a list containing start and stop times of all sections
-    -------
+    Class containing functions for calculating splits using midi files.
     """
-    if break_size is None:
-        break_size = 5
+    BREAK_SIZE = 5
+    MIN_SECTION_SIZE = 20
 
-    duration = file_duration
-    breaks = AudioVideoTools.find_breaks(
-        midi,
-        length=break_size
-    )
+    def get_split_points_sync(
+            self,
+            session: Session,
+            break_size: Optional[Union[float, int]] = None) -> \
+            List[timestamps]:
+        """
+        Calculate split points in seconds for an aac/video and flac file using
+        the sync function to identify correct start and end times for each
+        section.
 
-    if breaks:
-        # Calculate the exact timestamps at which to split.
-        breakpoints = []
-        for m in breaks:
-            breakpoints.append(m[0] + ((m[1] - m[0]) / 2))
+        Provides significantly better results than regular get_split_points.
 
-        first_note_time = AudioVideoTools.get_first_time(midi=midi)
-        duration_midi = AudioVideoTools().get_last_time(midi) - first_note_time
+        Parameters
+        ----------
+        session: Session object containing at least a midi, flac, and aac file.
+        break_size: the amount of time between notes to be considered a break.
 
-        breakpoints -= first_note_time
+        Returns a list containing timestamps of sections
+        -------
 
-        # If the break point is in the second half of the file calculate the
-        # timestamp from the right. This is just for the video.
-        breakpoints_lr = []
-        for b in breakpoints:
-            if b > duration / 2:
-                breakpoints_lr.append(
-                    (duration - pad_right) - (duration_midi - b)
-                )
-            else:
-                breakpoints_lr.append(
-                    b + pad_left
-                )
-        # Calculate exact timestamps at which to split file into sections.
-        splits = calc_splits(
-            breakpoints=breakpoints_lr,
-            startpoint=pad_left
+        """
+        if break_size is None:
+            break_size = self.BREAK_SIZE
+
+        if [i for i in [session.audio.file, session.performance,
+                        session.flac.file] if i is None]:
+            raise MissingSubsessionFilesError("get_split_points_sync requires"
+                                              " a midi and audio file to "
+                                              "be present in the session.")
+
+        break_notes = AudioVideoTools().find_breaks(
+            midi=session.performance,
+            length=break_size,
+            return_notes=True
         )
-        # Generate splits does not generate a split for the last section
-        # because it doesn't have the length of the file, therefore, we add it
-        # here
-        splits.append((splits[-1][1], duration-pad_right))
 
-    else:
-        # In case no breaks were found
-        splits = [(pad_left, duration - pad_right)]
+        section_notes = self.breaks_to_sections(
+            performance=session.performance,
+            breaks=break_notes
+        )
 
-    return splits
+        first_last_times = timestamps_spec(
+            subsession=session,
+            notes_index=(0, -1)
+        )
+        note_array = session.performance.note_array()
+
+        section_times: List[timestamps] = []
+        for i in section_notes:
+            start_time = first_last_times[1] + note_array['onset_sec'][i[0]]
+            end_time = first_last_times[1] + note_array['onset_sec'][i[1]]
+
+            times = timestamps_spec(
+                subsession=session,
+                notes_index=(i[0], i[1]),
+                search_period=12,
+                start_end_times=(start_time, end_time),
+                window_size=1000,
+                hop_size=int(np.round(44100 * 0.005))
+            )[1:]
+
+            section_times.append(times)
+
+        return section_times
+
+    def breaks_to_sections(self,
+                           performance: Performance,
+                           breaks: List[Tuple[int, int]],
+                           min_section_size: Optional[int] = None) -> \
+            List[note_sections]:
+        """
+        Take a list with the output from find_breaks and convert it so that
+        the notes are pointing to the start and end of the sections between
+        breaks.
+
+        Filters out sections with very few notes.
+
+        Parameters
+        ----------
+        min_section_size: the minimum amount of notes required in a section
+        performance: Partitura performance
+        breaks: output from break_notes
+
+        Returns a list containing start and end of sections
+        -------
+        """
+        if min_section_size is None:
+            min_section_size = self.MIN_SECTION_SIZE
+
+        prev_note: int = 0
+        sections: List[note_sections] = []
+        for i in breaks:
+            if i[0] - prev_note < min_section_size:
+                continue
+            sections.append((prev_note, i[0]))
+            prev_note = i[1]
+
+        sections.append((prev_note, len(performance.note_array())-1))
+
+        return sections
+
+    @staticmethod
+    def convert_to_timestamps(sections: List[note_sections],
+                              performance: Performance) -> List[timestamps]:
+        """
+        Convert a list of note_sections to a list of timestamps
+        """
+        note_array = performance.note_array()
+        timestamp_list: List[timestamps] = []
+        for i in sections:
+            first_time = note_array['onset_sec'][i[0]]
+            last_time = note_array['onset_sec'][i[1]]
+            timestamp_list.append((first_time, last_time))
+
+        return timestamp_list
+
+    def get_split_points(
+            self,
+            midi: Performance,
+            break_size: Optional[Union[float, int]] = None
+    ) -> List[timestamps]:
+        """
+        Calculate splits for a file according to midi timestamps.
+
+        Parameters
+        ----------
+        midi: midi file to use when identifying breaks
+        break_size: how much time is considered a break
+
+        Returns a list containing start and stop times of all sections
+        -------
+        """
+        if break_size is None:
+            break_size = self.BREAK_SIZE
+
+        breakpoints = AudioVideoTools.find_breaks(
+            midi=midi,
+            length=break_size,
+            return_notes=True
+        )
+        breaks = self.breaks_to_sections(
+            performance=midi,
+            breaks=breakpoints,
+        )
+        breaks = self.convert_to_timestamps(breaks, performance=midi)
+
+        return breaks
 
 
 def split_at_timestamps(splits: list,
