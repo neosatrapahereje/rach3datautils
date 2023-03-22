@@ -7,6 +7,8 @@ from rach3datautils.session import Session
 from rach3datautils.alignment.sync import timestamps_spec
 from rach3datautils.exceptions import MissingSubsessionFilesError
 from pathlib import Path
+import numpy as np
+from tqdm import tqdm
 
 
 def main(root_dir: PathLike,
@@ -31,7 +33,7 @@ def main(root_dir: PathLike,
                                                  ".mid"])
 
     fail_list: List[Session] = []
-    for i in subsessions:
+    for i in tqdm(subsessions):
         output_file = output_dir.joinpath(str(i.id) + "_trimmed.mp4")
         if output_file.exists() and not overwrite:
             continue
@@ -50,14 +52,11 @@ def main(root_dir: PathLike,
 
 def trim(subsession: Session,
          output_file: PathLike,
-         padding: Optional[float] = None,
-         get_timestamps_args: Optional[Dict] = None):
+         padding: Optional[float] = None):
     """
     Trim the silence from the start and end of a video based on given
     midi and flac files and output to the output file specified.
     """
-    if get_timestamps_args is None:
-        get_timestamps_args = {}
     if padding is None:
         padding = 1.
 
@@ -70,7 +69,24 @@ def trim(subsession: Session,
             "and midi present."
         )
 
-    timestamps = timestamps_spec(subsession=subsession, **get_timestamps_args)
+    # To improve speed and reduce ram usage, we run a large search with low
+    # accuracy, and then we do a second more focussed search with good
+    # accuracy to get the exact locations.
+    _, start_time, end_time = timestamps_spec(
+        subsession=subsession,
+        notes_index=(0, -1),
+        search_period=180,
+        window_size=100,
+        hop_size=int(np.round(44100 * 0.1))
+    )
+    timestamps = timestamps_spec(
+        subsession=subsession,
+        notes_index=(0, -1),
+        search_period=3,
+        start_end_times=(start_time, end_time),
+        window_size=500,
+        hop_size=int(np.round(44100 * 0.0025))
+    )
 
     AudioVideoTools.extract_section(file=subsession.video.file,
                                     output_file=output_file,
