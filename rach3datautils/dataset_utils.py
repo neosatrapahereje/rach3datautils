@@ -14,7 +14,7 @@ class DatasetUtils:
     Utilities for working with the rach3 dataset.
     """
 
-    def __init__(self, root_path: PathLike = None):
+    def __init__(self, root_path: Union[PathLike, List[PathLike]] = None):
         """
         Parameters
         ----------
@@ -22,9 +22,11 @@ class DatasetUtils:
                    folder.
         """
         if root_path is None:
-            root_path: Path = Path("./")
+            root_path: List[PathLike] = ["./"]
+        if not isinstance(root_path, list):
+            root_path = [root_path]
 
-        self.root: Path = Path(root_path)
+        self.root: List[Path] = [Path(i) for i in root_path]
 
     def get_files_by_type(self,
                           filetype: valid_input_filetypes) -> list[Path]:
@@ -47,8 +49,9 @@ class DatasetUtils:
             filetype = [filetype]
 
         files = []
-        [files.extend(PathUtils.get_files_by_type(self.root, i))
-         for i in filetype]
+        for dirpath in self.root:
+            [files.extend(PathUtils.get_files_by_type(dirpath, i))
+                for i in filetype]
 
         return files
 

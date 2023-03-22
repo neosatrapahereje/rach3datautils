@@ -29,11 +29,27 @@ class PathUtils:
                 return "trimmed_video"
             if self.is_full_video(path):
                 return "full_video"
-            return "video"
+            elif self.is_valid_video(path):
+                return "video"
         elif path.suffix == ".aac":
             if self.is_full_audio(path):
                 return "full_audio"
-            return "audio"
+            elif self.is_valid_audio(path):
+                return "audio"
+
+    @staticmethod
+    def is_valid_video(file) -> bool:
+        """
+        Checks whether a file is a basic video file.
+        """
+        return file.stem.split("_")[-1][0] == "p" and file.suffix == ".mp4"
+
+    @staticmethod
+    def is_valid_audio(file: Path) -> bool:
+        """
+        Checks whether a file is a basic audio file (not split, not full, etc.)
+        """
+        return file.stem.split("_")[-1][0] == "p" and file.suffix == ".aac"
 
     @staticmethod
     def get_session_no(file: Path) -> Union[str, None]:

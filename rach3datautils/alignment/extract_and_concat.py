@@ -5,30 +5,21 @@ from rach3datautils.video_audio_tools import AudioVideoTools
 from rach3datautils.dataset_utils import DatasetUtils
 from rach3datautils.backup_files import PathLike
 from rach3datautils.session import Session
+from rach3datautils.exceptions import MissingSubsessionFilesError
 import os
 from pathlib import Path
+from tqdm import tqdm
 
 
 def main(root_dir: PathLike,
-         output_dir: Optional[PathLike] = None,
+         output_dir: PathLike,
          overwrite: Optional[bool] = None,
          audio: Optional[bool] = None,
          video: Optional[bool] = None):
     """
     Script for concatenating session videos into one video per session. Can
-    also extract and concatenate the audio and flac files.
+    also extract and concatenate the audio.
     """
-    if root_dir is None:
-        raise AttributeError("No root directory was supplied!")
-    if output_dir is None:
-        output_dir = './concat_audio/'
-    if overwrite is None:
-        overwrite = False
-    if audio is None:
-        audio_only = False
-    if video is None:
-        video = True
-
     output = Path(output_dir)
     root_dir = Path(root_dir)
     data_utils = DatasetUtils(root_path=root_dir)
@@ -43,16 +34,56 @@ def main(root_dir: PathLike,
 
     sessions = data_utils.get_sessions(filetype=filetypes)
 
-    for session in sessions:
-        if audio:
-            _aac_concat(session,
-                        output.joinpath(str(session.id) +
-                                        "_full.aac"),
-                        overwrite)
-        if video:
-            _video_concat(session,
-                          output.joinpath(str(session.id) + "_full.mp4"),
-                          overwrite)
+    for session in tqdm(sessions):
+        extract_and_concat(
+            session=session,
+            output=output,
+            audio=audio,
+            video=video,
+            overwrite=overwrite
+        )
+
+
+def extract_and_concat(session: Session,
+                       output: Path,
+                       audio: Optional[bool] = None,
+                       video: Optional[bool] = None,
+                       overwrite: Optional[bool] = None):
+    """
+    Extract audio from videos and concatenate both audios and videos into one
+    file for each subsession.
+    Parameters
+    ----------
+    session: subsession object
+    output
+    audio
+    video
+    overwrite
+
+    Returns
+    -------
+
+    """
+    if overwrite is None:
+        overwrite = False
+    if audio is None:
+        audio = True
+    if video is None:
+        video = True
+
+    if not session.video.file_list:
+        raise MissingSubsessionFilesError("Video files expected in "
+                                          "subsession, but found none")
+
+    if audio:
+        _aac_concat(session,
+                    output.joinpath(str(session.id) +
+                                    "_full.aac"),
+                    overwrite)
+    if video:
+        _video_concat(session,
+                      output.joinpath(str(session.id) + "_full.mp4"),
+                      overwrite)
 
 
 def _video_concat(session: Session,

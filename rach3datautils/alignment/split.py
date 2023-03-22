@@ -12,7 +12,6 @@ import os
 import numpy as np
 from tqdm import tqdm
 
-
 timestamps = Tuple[float, float]
 note_sections = Tuple[int, int]
 
@@ -57,7 +56,7 @@ def split_video_and_flac(
     if overwrite is None:
         overwrite = False
 
-    required = [subsession.midi.file, subsession.video.trimmed,
+    required = [subsession.midi.file, subsession.video.file,
                 subsession.flac.file]
     if [i for i in required if i is None]:
         raise MissingSubsessionFilesError("Midi and video are required for "
@@ -89,8 +88,8 @@ def split_video_and_flac(
         file=flac,
         output_dir=output_dir,
         overwrite=overwrite,
-        reencode=True
-    )
+        reencode=True  # For some reason, the splits end up being slightly
+    )                  # off sometimes if we don't re-encode
 
 
 class Splits:
@@ -200,7 +199,7 @@ class Splits:
             sections.append((prev_note, i[0]))
             prev_note = i[1]
 
-        sections.append((prev_note, len(performance.note_array())-1))
+        sections.append((prev_note, len(performance.note_array()) - 1))
 
         return sections
 
