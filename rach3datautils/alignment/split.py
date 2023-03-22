@@ -10,6 +10,7 @@ from rach3datautils.session import Session
 from rach3datautils.alignment.sync import timestamps_spec
 import os
 import numpy as np
+from tqdm import tqdm
 
 
 timestamps = Tuple[float, float]
@@ -36,7 +37,7 @@ def main(root_dir: PathLike,
     subsessions = dataset.get_sessions(filetype=[".mid", ".mp4", ".flac",
                                                  ".aac"])
 
-    for i in subsessions:
+    for i in tqdm(subsessions):
         split_video_and_flac(
             subsession=i,
             overwrite=overwrite,

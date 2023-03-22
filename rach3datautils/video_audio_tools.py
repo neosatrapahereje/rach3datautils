@@ -4,8 +4,14 @@ from partitura.performance import Performance
 from pathlib import Path
 import tempfile
 from rach3datautils.misc import PathLike
+from rach3datautils.config import DEBUG
 from typing import Optional, Union, overload, Literal
 import shutil
+
+if DEBUG:
+    LOGLEVEL = "debug"
+else:
+    LOGLEVEL = "quiet"
 
 
 class AudioVideoTools:
@@ -33,7 +39,8 @@ class AudioVideoTools:
             return output
 
         video = ffmpeg.input(filepath)
-        out = ffmpeg.output(video.audio, filename=output, c="copy")
+        out = ffmpeg.output(video.audio, filename=output, c="copy",
+                            loglevel=LOGLEVEL)
         out = ffmpeg.overwrite_output(out)
         out.run()
         return output
@@ -75,7 +82,8 @@ class AudioVideoTools:
 
         # This is a bit of a hack, there's probably a better way to do it.
         concatenated = ffmpeg.input(Path(f.name), f='concat', safe=0)
-        out = ffmpeg.output(concatenated, filename=output, c="copy")
+        out = ffmpeg.output(concatenated, filename=output, c="copy",
+                            loglevel=LOGLEVEL)
         out = ffmpeg.overwrite_output(out)
         out.run()
 
@@ -180,7 +188,7 @@ class AudioVideoTools:
         input_file = ffmpeg.input(audio_path)
         audio = input_file.audio
         trimmed = audio.filter("atrim", start=split_start, end=split_end)
-        out = ffmpeg.output(trimmed, filename=output)
+        out = ffmpeg.output(trimmed, filename=output, loglevel=LOGLEVEL)
         out = ffmpeg.overwrite_output(out)
         out.run()
 
@@ -250,7 +258,7 @@ class AudioVideoTools:
         ).filter(
             "areverse"
         )
-        out = ffmpeg.output(trimmed, filename=output)
+        out = ffmpeg.output(trimmed, filename=output, loglevel=LOGLEVEL)
         out = ffmpeg.overwrite_output(out)
         out.run()
 
@@ -280,10 +288,11 @@ class AudioVideoTools:
 
         ffmpeg_in = ffmpeg.input(file, ss=start)
         if reencode:
-            out = ffmpeg_in.output(filename=output_file, to=end-start)
+            out = ffmpeg_in.output(filename=output_file, to=end-start,
+                                   loglevel=LOGLEVEL)
         else:
             out = ffmpeg_in.output(filename=output_file, to=end-start,
-                                   c="copy")
+                                   c="copy", loglevel=LOGLEVEL)
 
         out = ffmpeg.overwrite_output(out)
         out.run()

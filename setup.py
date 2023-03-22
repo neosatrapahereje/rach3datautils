@@ -16,7 +16,8 @@ REQUIRES_PYTHON = ">=3.9"
 VERSION = "0.0.1"
 
 # Required packages
-REQUIRED = ["partitura", "ffmpeg-python", "tqdm", "numpy", "madmom", "scipy"]
+REQUIRED = ["partitura", "ffmpeg-python", "tqdm", "numpy", "madmom", "scipy",
+            "python-dotenv"]
 
 # Optional
 EXTRAS = {}
