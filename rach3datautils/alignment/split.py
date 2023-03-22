@@ -87,7 +87,8 @@ def split_video_and_flac(
         splits=splits_flac,
         file=flac,
         output_dir=output_dir,
-        overwrite=overwrite
+        overwrite=overwrite,
+        reencode=True
     )
 
 
@@ -141,7 +142,10 @@ class Splits:
 
         first_last_times = timestamps_spec(
             subsession=session,
-            notes_index=(0, -1)
+            notes_index=(0, -1),
+            search_period=180,
+            window_size=100,
+            hop_size=int(np.round(44100 * 0.1))
         )
         note_array = session.performance.note_array()
 
@@ -153,7 +157,7 @@ class Splits:
             times = timestamps_spec(
                 subsession=session,
                 notes_index=(i[0], i[1]),
-                search_period=12,
+                search_period=10,
                 start_end_times=(start_time, end_time),
                 window_size=1000,
                 hop_size=int(np.round(44100 * 0.005))
@@ -250,8 +254,8 @@ class Splits:
 def split_at_timestamps(splits: list,
                         file: Path,
                         output_dir: Path,
-                        overwrite: bool):
-    # Split files at the calculated timestamps
+                        overwrite: bool,
+                        reencode: Optional[bool] = None):
     for split_no, (start, end) in enumerate(splits):
         output_path_video = output_dir.joinpath(
             file.stem + f"_split{split_no + 1}" + file.suffix
@@ -265,6 +269,7 @@ def split_at_timestamps(splits: list,
             start=start,
             end=end,
             output_file=output_path_video,
+            reencode=reencode
         )
 
 

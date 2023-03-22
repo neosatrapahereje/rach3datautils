@@ -258,13 +258,15 @@ class AudioVideoTools:
     def extract_section(file: PathLike,
                         output_file: PathLike,
                         start: float,
-                        end: float
+                        end: float,
+                        reencode: Optional[bool] = None
                         ):
         """
         Extract a section from a video given start and end points. Will
         overwrite files.
         Parameters
         ----------
+        reencode: whether to reencode the file or not
         output_file: Where to output new section
         file: the path to the video
         start: the timestamp where to start the section from
@@ -273,8 +275,16 @@ class AudioVideoTools:
         Returns None
         -------
         """
+        if reencode is None:
+            reencode = False
+
         ffmpeg_in = ffmpeg.input(file, ss=start)
-        out = ffmpeg_in.output(filename=output_file, to=end-start, c="copy")
+        if reencode:
+            out = ffmpeg_in.output(filename=output_file, to=end-start)
+        else:
+            out = ffmpeg_in.output(filename=output_file, to=end-start,
+                                   c="copy")
+
         out = ffmpeg.overwrite_output(out)
         out.run()
 
