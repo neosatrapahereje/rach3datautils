@@ -2,7 +2,7 @@
 
 This Python package contains tools for managing the Rach3 dataset.
 
-# development
+## development
 Make sure you're running Python 3.9 or above, clone the repo, and then do the 
 following from the project root:
 
