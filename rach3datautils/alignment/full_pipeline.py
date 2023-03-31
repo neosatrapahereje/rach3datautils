@@ -1,17 +1,19 @@
 import argparse as ap
 from rach3datautils.alignment.extract_and_concat import extract_and_concat
 from rach3datautils.alignment.split import split_video_and_flac
-from rach3datautils.dataset_utils import DatasetUtils
+from rach3datautils.utils.dataset_utils import DatasetUtils
 from pathlib import Path
 from rach3datautils.backup_files import PathLike
 from tqdm import tqdm
 import tempfile
 import os
+from typing import Optional
 
 
 def main(root_dir: PathLike,
-         output_dir: PathLike = None,
-         overwrite: bool = False):
+         output_dir: Optional[PathLike] = None,
+         overwrite: Optional[bool] = None,
+         reencode: Optional[bool] = None):
     """
     Run the preprocessing pipeline for the rach3 dataset.
 
@@ -41,22 +43,24 @@ def main(root_dir: PathLike,
         tempdir = Path(tempdir)
 
         dataset = DatasetUtils(root_path=[root_dir, tempdir])
-        sessions = dataset.get_sessions(".mp4")
+        sessions = dataset.get_sessions([".mp4", ".mid", ".flac", ".aac"])
 
-        # First we run extract_and_concat
-        for subsession in tqdm(sessions, desc="concatenating files"):
-            extract_and_concat(
-                session=subsession,
-                output=tempdir,
-                overwrite=overwrite
-            )
-        sessions = dataset.get_sessions([".mid", ".mp4", ".flac", ".aac"])
-        for subsession in tqdm(sessions, desc="splitting files"):
+        for subsession in tqdm(sessions, desc="concatenating and splitting "
+                                              "files"):
+            if subsession.audio.file is None or subsession.video.file is None:
+                concat_outputs = extract_and_concat(
+                    session=subsession,
+                    output=tempdir,
+                    overwrite=overwrite,
+                    reencode=reencode
+                )
+            [subsession.set_unknown(i) for i in concat_outputs]
             split_video_and_flac(
                 subsession=subsession,
                 output_dir=output_dir,
                 overwrite=overwrite
             )
+            [i.unlink() for i in concat_outputs]
 
     print(f"Successfully processed files to: {output_dir.absolute()}")
 
@@ -65,8 +69,8 @@ if __name__ == "__main__":
     parser = ap.ArgumentParser(
         prog="Audio Alignment Pipeline",
         description="To be used with rach3 dataset. Performs multiple steps "
-                    "in the audio alignment pipeline.")
-
+                    "in the audio alignment pipeline."
+    )
     parser.add_argument(
         "-d", "--root_dir",
         action='store',
@@ -84,10 +88,16 @@ if __name__ == "__main__":
         help='Where to output processed files. If the directory does not '
              'exist, a new one will be created. Output directory must be '
              'within the input directory.',
-        default='./processed_audio')
-
+        default='./processed_audio'
+    )
+    parser.add_argument(
+        "-r", "--reencode", action='store_true',
+        help='Whether to reencode the concatonated video for more accurate '
+             'timestamps.'
+    )
     args = parser.parse_args()
 
     main(output_dir=args.output_dir,
          overwrite=args.overwrite,
-         root_dir=args.root_dir)
+         root_dir=args.root_dir,
+         reencode=args.reencode)

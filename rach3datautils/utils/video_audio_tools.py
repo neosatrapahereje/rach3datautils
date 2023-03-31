@@ -29,7 +29,7 @@ class AudioVideoTools:
         """
 
         if output is None:
-            output = Path(os.path.join(".", "audio_files",
+            output = Path(os.path.join("..", "audio_files",
                                        filepath.stem + "_audio.mp3"))
         elif not output.suffix == ".aac":
             raise AttributeError("Output must either be None or a valid path "
@@ -46,8 +46,10 @@ class AudioVideoTools:
         return output
 
     @staticmethod
-    def concat(files: list[Optional[Path]], output: Path,
-               overwrite: Optional[bool] = None) -> Optional[Path]:
+    def concat(files: list[Optional[Path]],
+               output: Path,
+               overwrite: Optional[bool] = None,
+               reencode: Optional[bool] = None) -> Optional[Path]:
         """
         Takes a list of audio or video files and concatenates them into one
         file. They will be concatenated in the order present within the list.
@@ -57,6 +59,8 @@ class AudioVideoTools:
         """
         if overwrite is None:
             overwrite = False
+        if reencode is None:
+            reencode = False
         if not files:
             return
         if len(files) == 1:
@@ -82,11 +86,19 @@ class AudioVideoTools:
 
         # This is a bit of a hack, there's probably a better way to do it.
         concatenated = ffmpeg.input(Path(f.name), f='concat', safe=0)
-        out = ffmpeg.output(concatenated, filename=output, c="copy",
-                            loglevel=LOGLEVEL)
+        if reencode:
+            out = ffmpeg.output(concatenated,
+                                filename=output,
+                                loglevel=LOGLEVEL)
+        else:
+            out = ffmpeg.output(concatenated,
+                                filename=output,
+                                c="copy",
+                                loglevel=LOGLEVEL)
         out = ffmpeg.overwrite_output(out)
         out.run()
 
+        tmp.close()
         return output
 
     @staticmethod

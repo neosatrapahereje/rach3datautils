@@ -1,5 +1,5 @@
 from pathlib import Path
-from rach3datautils.path_utils import PathUtils
+from rach3datautils.utils.path_utils import PathUtils
 from rach3datautils.misc import PathLike
 from rach3datautils.exceptions import IdentityError
 from typing import Union, Optional, List, Tuple, Literal
@@ -49,13 +49,27 @@ class SessionIdentity:
         file_id = self.get_file_identity(file)
 
         if self.full_id is None:
-            self.full_id = file_id
+            self.set(file)
 
         if file_id != self.full_id:
             raise IdentityError("Trying to set a file from the wrong "
                                 "session.")
 
         return True
+
+    def set(self, file: Path):
+        """
+        Set the identity from a given file. Raises IdentityError if file
+        cannot be identified.
+        """
+        date, subsession_no = self.get_file_identity(file)
+
+        if date is None or subsession_no is None:
+            raise IdentityError("File could not be identified.")
+
+        self.date = date
+        self.subsession_no = subsession_no
+        self.full_id = (self.date, self.subsession_no)
 
 
 class SessionFile:

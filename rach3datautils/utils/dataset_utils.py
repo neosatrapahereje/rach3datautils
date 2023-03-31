@@ -2,7 +2,7 @@ from pathlib import Path
 from collections import defaultdict
 from typing import Union, Literal, List
 from rach3datautils.session import Session, SessionIdentity
-from rach3datautils.path_utils import PathUtils, suffixes_list, suffixes
+from rach3datautils.utils.path_utils import PathUtils, suffixes_list, suffixes
 from rach3datautils.misc import PathLike
 
 
@@ -98,12 +98,9 @@ class DatasetUtils:
         sorted_files = defaultdict(Session)
 
         for i in files:
-            session_id = SessionIdentity.get_file_identity(i)
+            session_id = SessionIdentity()
+            session_id.set(i)
 
-            if [j for j in session_id if j is None]:
-                raise AttributeError(f"The path {i} could not be "
-                                     f"identified.")
-            else:
-                sorted_files[session_id].set_unknown(i)
+            sorted_files[str(session_id)].set_unknown(i)
 
         return list(sorted_files.values())

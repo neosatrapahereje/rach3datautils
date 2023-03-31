@@ -1,8 +1,8 @@
 import argparse
 import tempfile
-from typing import Literal, Optional
-from rach3datautils.video_audio_tools import AudioVideoTools
-from rach3datautils.dataset_utils import DatasetUtils
+from typing import Literal, Optional, List
+from rach3datautils.utils.video_audio_tools import AudioVideoTools
+from rach3datautils.utils.dataset_utils import DatasetUtils
 from rach3datautils.backup_files import PathLike
 from rach3datautils.session import Session
 from rach3datautils.exceptions import MissingSubsessionFilesError
@@ -15,7 +15,8 @@ def main(root_dir: PathLike,
          output_dir: PathLike,
          overwrite: Optional[bool] = None,
          audio: Optional[bool] = None,
-         video: Optional[bool] = None):
+         video: Optional[bool] = None,
+         reencode: Optional[bool] = None):
     """
     Script for concatenating session videos into one video per session. Can
     also extract and concatenate the audio.
@@ -40,7 +41,8 @@ def main(root_dir: PathLike,
             output=output,
             audio=audio,
             video=video,
-            overwrite=overwrite
+            overwrite=overwrite,
+            reencode=reencode
         )
 
 
@@ -48,21 +50,22 @@ def extract_and_concat(session: Session,
                        output: Path,
                        audio: Optional[bool] = None,
                        video: Optional[bool] = None,
-                       overwrite: Optional[bool] = None):
+                       overwrite: Optional[bool] = None,
+                       reencode: Optional[bool] = None) -> List[Path]:
     """
     Extract audio from videos and concatenate both audios and videos into one
     file for each subsession.
     Parameters
     ----------
-    session: subsession object
-    output
-    audio
-    video
-    overwrite
+    reencode
+    session: Subsession object
+    output: Where to output file
+    audio: Whether to do subsession audio
+    video: Whether to do subsession video
+    overwrite: Whether to overwrite already existing files
 
-    Returns
+    Returns None
     -------
-
     """
     if overwrite is None:
         overwrite = False
@@ -75,20 +78,29 @@ def extract_and_concat(session: Session,
         raise MissingSubsessionFilesError("Video files expected in "
                                           "subsession, but found none")
 
+    outputs = []
     if audio:
-        _aac_concat(session,
-                    output.joinpath(str(session.id) +
-                                    "_full.aac"),
-                    overwrite)
+        audio_output = output.joinpath(str(session.id) + "_full.aac")
+        outputs.append(audio_output)
+        _aac_concat(session=session,
+                    output=audio_output,
+                    overwrite=overwrite,
+                    reencode=reencode)
     if video:
-        _video_concat(session,
-                      output.joinpath(str(session.id) + "_full.mp4"),
-                      overwrite)
+        video_output = output.joinpath(str(session.id) + "_full.mp4")
+        outputs.append(video_output)
+        _video_concat(session=session,
+                      output=video_output,
+                      overwrite=overwrite,
+                      reencode=reencode)
+
+    return outputs
 
 
 def _video_concat(session: Session,
                   output: Path,
-                  overwrite: Optional[bool] = None):
+                  overwrite: Optional[bool] = None,
+                  reencode: Optional[bool] = None):
     if overwrite is None:
         overwrite = False
 
@@ -101,14 +113,17 @@ def _video_concat(session: Session,
     AudioVideoTools.concat(
         files=session.video.file_list,
         output=output,
-        overwrite=overwrite)
+        overwrite=overwrite,
+        reencode=reencode
+    )
 
     session.video.file = output
 
 
 def _aac_concat(session: Session,
                 output: Path,
-                overwrite: Optional[bool] = None):
+                overwrite: Optional[bool] = None,
+                reencode: Optional[bool] = None):
     if overwrite is None:
         overwrite = False
 
@@ -133,7 +148,9 @@ def _aac_concat(session: Session,
     AudioVideoTools.concat(
         files=session.audio.file_list,
         output=output,
-        overwrite=overwrite)
+        overwrite=overwrite,
+        reencode=reencode
+    )
 
     session.audio.file = output
 
@@ -172,7 +189,10 @@ if __name__ == "__main__":
         "-v", "--video", action="store_true",
         help="Whether to concatenate the video files."
     )
-
+    parser.add_argument(
+        "-r", "--reencode", action="store_true",
+        help="Whether to reencode the files when concatonating"
+    )
     args = parser.parse_args()
 
     main(
@@ -180,5 +200,6 @@ if __name__ == "__main__":
         output_dir=args.output_dir,
         overwrite=args.overwrite,
         audio=args.audio,
-        video=args.video
+        video=args.video,
+        reencode=args.reencode
     )

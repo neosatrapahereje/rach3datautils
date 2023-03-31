@@ -1,20 +1,357 @@
 import madmom
-from rach3datautils import dataset_utils
+from rach3datautils.utils import dataset_utils
 from rach3datautils.exceptions import MissingSubsessionFilesError
 import numpy as np
 import numpy.typing as npt
-from typing import Tuple, Optional, List
+from typing import Tuple, Optional, List, TypedDict
 from rach3datautils.backup_files import PathLike
-from rach3datautils.dataset_utils import Session
+from rach3datautils.utils.dataset_utils import Session
 import argparse as ap
 from pathlib import Path
 import scipy.spatial as sp
 import csv
 from tqdm import tqdm
 
-
 # (session ID, first note, last note)
-timestamps = Tuple[str, float, float]
+time_section = Tuple[float, float]
+timestamps = Tuple[str, time_section]
+frame_section = Tuple[int, int]
+
+
+# These TypedDicts are useful for specifying inputs to the load_and_sync func.
+class TrackArgs(TypedDict, total=False):
+    frame_size: Optional[int]
+    sample_rate: Optional[int]
+    hop_size: Optional[float]
+
+
+class SyncArgs(TypedDict, total=False):
+    notes_index: Optional[Tuple[int, int]]
+    window_size: Optional[int]
+    stride: Optional[int]
+    search_period: Optional[int]
+    start_end_times: Optional[time_section]
+
+
+class Track:
+    """
+    Class for a single track, to be used in the Sync class when representing
+    the two tracks being synced.
+    """
+    FRAME_SIZE = 8372
+    SAMPLE_RATE = 44100
+    HOP_SIZE = int(np.round(SAMPLE_RATE * 0.005))
+
+    def __init__(self,
+                 filepath: PathLike,
+                 frame_size: Optional[int] = None,
+                 sample_rate: Optional[int] = None,
+                 hop_size: Optional[float] = None):
+        if frame_size is None:
+            frame_size = self.FRAME_SIZE
+        if sample_rate is None:
+            sample_rate = self.SAMPLE_RATE
+        if hop_size is None:
+            hop_size = self.HOP_SIZE
+
+        self.hop_size = hop_size
+        self.sample_rate = sample_rate
+
+        self.signal: madmom.audio.signal.FramedSignal = self.load_signal(
+            filepath=filepath,
+            frame_size=frame_size,
+            hop_size=hop_size,
+            sample_rate=sample_rate
+        )
+        self.frame_times: npt.NDArray = self.calc_frame_times()
+
+    def getframe(self, time: float) -> int:
+        """
+        Get the closest frame to a certain timestamp is seconds. Inverse of
+        gettime.
+        """
+        return abs((self.frame_times - time)).argmin()
+
+    def calc_frame_times(self) -> npt.NDArray:
+        return np.arange(
+            self.signal.shape[0]
+        ) * (self.hop_size / self.sample_rate)
+
+    @staticmethod
+    def load_signal(filepath: PathLike,
+                    frame_size: int,
+                    hop_size: int,
+                    sample_rate: int) -> madmom.audio.signal.FramedSignal:
+        signal = madmom.audio.Signal(
+            str(filepath),
+            sample_rate=sample_rate,
+            num_channels=1,
+            norm=True,
+        )
+        f_signal = madmom.audio.FramedSignal(
+            signal=signal,
+            frame_size=frame_size,
+            hop_size=hop_size
+        )
+
+        return f_signal
+
+    def calc_log_spect_section(
+            self,
+            start: Optional[float] = None,
+            end: Optional[float] = None,
+            spectrogram_clip: Optional[Tuple[int, int]] = None
+    ) -> Tuple[time_section, npt.NDArray]:
+        """
+        Generate a certain section of the log_spectrogram given start and end
+        points.
+        Uses the logarithmic filtered spectrogram by default.
+        If start/end points are none then the entire signal is used.
+
+        spectrogram_clip specifies the start and end of the frequency bands
+        index, useful for reducing ram usage and improving performance if you
+        don't need the whole range of frequency bands.
+        """
+        if start is None:
+            start = 0
+        if end is None:
+            end = self.signal.shape[0]
+        if spectrogram_clip is None:
+            spectrogram_clip = (10, 40)
+
+        start = self.getframe(start)
+        end = self.getframe(end)
+
+        if end - start <= 0:
+            raise AttributeError("The given end should be larger than the "
+                                 "start.")
+
+        spec = np.array(
+            madmom.audio.LogarithmicFilteredSpectrogram(
+                self.signal[start:end][:]
+            )
+        )[:, spectrogram_clip[0]:spectrogram_clip[1]]
+
+        return (self.frame_times[start], self.frame_times[end]), spec
+
+
+class Sync:
+    """
+    A class containing all necessary functions for syncing two audios based on
+    their spectrograms and a midi file synced to one audio.
+    """
+    WINDOW_SIZE = 2000
+    SEARCH_PERIOD = 120
+    STRIDE = 1
+    NOTES_INDEX = (0, -1)
+
+    def __init__(self,
+                 distance_func: Optional = None):
+        if distance_func is None:
+            distance_func = self.cos_dist
+
+        self.distance_func = distance_func
+        self.stride: int = self.STRIDE
+        self.window_size: int = self.WINDOW_SIZE
+
+    def calc_timestamps(self,
+                        synced_track: Track,
+                        nonsynced_track: Track,
+                        note_array: npt.NDArray,
+                        notes_index: Optional[Tuple[int, int]] = None,
+                        window_size: Optional[int] = None,
+                        stride: Optional[int] = None,
+                        search_period: Optional[int] = None,
+                        start_end_times: Optional[time_section] = None
+                        ) -> time_section:
+        """
+        Get the timestamps for the first and last note given 2 audio files and
+        a midi file.
+
+        Uses the spectrogram between the two files, and finds the most likely
+        place where the notes are.
+
+        Parameters
+        ----------
+        note_array: note array synced with synced_track
+        window_size: Size of windows generated within search_period in samples
+        nonsynced_track: track that is not synced to midi
+        synced_track: Track synced to the midi
+        start_end_times: To save time on processing, optionally provide the
+            times for the first and last notes in the aac file.
+        notes_index: A tuple containing indexes of first and last note of the
+            section to sync. Defaults to first and last notes (0, -1).
+        stride: how far to go between windows.
+        search_period: the period in seconds within which to search the aac
+            file at the start and end.
+
+        Returns a tuple with first entry being first note time and second entry
+        being second note time.
+        -------
+        """
+        if window_size is not None:
+            self.window_size = window_size
+        if stride is not None:
+            self.stride = stride
+        if search_period is None:
+            search_period = self.SEARCH_PERIOD
+        if notes_index is None:
+            notes_index = self.NOTES_INDEX
+        if start_end_times is None:
+            start_end_times = (0, nonsynced_track.frame_times[-1])
+
+        first_note_time = note_array["onset_sec"][notes_index[0]]
+
+        last_note_time = note_array["onset_sec"][notes_index[1]] + \
+            note_array["duration_sec"][notes_index[1]]
+
+        window_time = synced_track.frame_times[window_size]
+
+        # The first window is generated from the first note on to avoid index
+        # errors with the start of the file
+        _, synced_first_note_window = synced_track.calc_log_spect_section(
+            start=first_note_time,
+            end=first_note_time + window_time
+        )
+        # The last window is generated up to the last note
+        # This is in order to avoid index errors when hitting the end of the
+        # file
+        _, synced_last_note_window = synced_track.calc_log_spect_section(
+            start=last_note_time - window_time,
+            end=last_note_time
+        )
+
+        sect_border_first, nonsynced_first_note_windows = \
+            self.windows_within_section(
+                track=nonsynced_track,
+                section_size=search_period,
+                section_midpoint=start_end_times[0]
+            )
+
+        sect_border_last, nonsynced_last_note_windows = \
+            self.windows_within_section(
+                track=nonsynced_track,
+                section_midpoint=start_end_times[1],
+                section_size=search_period
+            )
+
+        first_distances = self.distance_func(nonsynced_first_note_windows,
+                                             synced_first_note_window)
+        last_distances = self.distance_func(nonsynced_last_note_windows,
+                                            synced_last_note_window)
+
+        first_note_nonsynced_window = first_distances.argmin()
+        first_note_nonsynced_frame = first_note_nonsynced_window * self.stride
+        first_time = sect_border_first[0] + nonsynced_track.frame_times[
+            first_note_nonsynced_frame
+        ]
+
+        last_note_nonsynced_window = np.argmin(last_distances)
+        last_note_nonsynced_frame = \
+            last_note_nonsynced_window * self.stride + self.window_size
+        last_time = sect_border_last[0] + nonsynced_track.frame_times[
+            last_note_nonsynced_frame
+        ]
+
+        return first_time, last_time
+
+    def windows_within_section(self,
+                               track: Track,
+                               section_size: float,
+                               section_midpoint: float,
+                               ) -> Tuple[time_section, npt.NDArray]:
+        """
+        Generate windows within 2 given boundaries. Returns the windows and
+        the start and end points of the boundaries.
+        """
+        if self.window_size is None or self.stride is None:
+            raise AttributeError("window_size and stride are undefined")
+
+        (start, end), section = track.calc_log_spect_section(
+            start=section_midpoint - section_size // 2,
+            end=section_midpoint + section_size // 2
+        )
+        windows = self.create_windows(
+            arr=section
+        )
+        return (start, end), windows
+
+    def create_windows(self,
+                       arr: np.ndarray,
+                       start: Optional[int] = None,
+                       end: Optional[int] = None
+                       ) -> npt.NDArray:
+        """
+        Create views into a given array corresponding to a sliding window.
+        If no start or end is given, then the start/end of the given array is
+        used.
+        Parameters
+        ----------
+        arr: array to be indexed
+        start: where to start indexing
+        end: where to end indexing
+        """
+        if start is None:
+            start = 0
+        if end is None:
+            end = arr.shape[0]
+
+        sub_window_ids = (
+                start +
+                np.expand_dims(np.arange(self.window_size), 0) +
+                np.expand_dims(np.arange(
+                    end - start - self.window_size, step=self.stride), 0).T
+        )
+
+        return arr[sub_window_ids, :]
+
+    @staticmethod
+    def manhatten_dist(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+        diff = np.abs(a - b)
+        sums = np.sum(diff, axis=(1, 2))
+        return sums
+
+    @staticmethod
+    def cos_dist(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+        """
+        Get cos distance between two windows. Could be better optimized bit
+        it's already fast enough anyway.
+        """
+        b = b.flatten()
+        return np.array([sp.distance.cosine(x.flatten(), b) for x in a[:]])
+
+
+def load_and_sync(
+        subsession: Session,
+        track_args: Optional[TrackArgs] = None,
+        sync_args: Optional[SyncArgs] = None,
+        sync_distance_func: Optional = None
+) -> time_section:
+    """
+    Function that handles loading flac and audio from a subsession and then
+    syncing them using the Sync and Track objects respectively.
+    """
+    if [i for i in [subsession.performance, subsession.flac.file,
+                    subsession.audio.file] if i is None]:
+        raise MissingSubsessionFilesError(
+            "Some files are missing from the session"
+        )
+
+    sync = Sync(distance_func=sync_distance_func)
+    flac = Track(
+        filepath=subsession.flac.file,
+        **track_args
+    )
+    aac = Track(
+        filepath=subsession.audio.file,
+        **track_args
+    )
+    return sync.calc_timestamps(
+        synced_track=flac,
+        nonsynced_track=aac,
+        note_array=subsession.performance.note_array(),
+        **sync_args
+    )
 
 
 def main(root_dir: PathLike,
@@ -35,14 +372,29 @@ def main(root_dir: PathLike,
 
     sessions = dataset.get_sessions([".mid", ".aac", ".flac"])
 
+    track_args = {
+        "sample_rate": sample_rate,
+        "frame_size": frame_size,
+        "hop_size": hop_size
+    }
+    sync_args = {
+        "notes_index": notes_index,
+        "window_size": window_size,
+        "stride": stride,
+        "search_period": search_period
+    }
     timestamps_list: List[timestamps] = []
     for i in tqdm(sessions):
         timestamps_list.append(
-            timestamps_spec(subsession=i, notes_index=notes_index,
-                            sample_rate=sample_rate, frame_size=frame_size,
-                            hop_size=hop_size, window_size=window_size,
-                            _dist_func=distance_function, stride=stride,
-                            search_period=search_period)
+            (
+                str(i),
+                load_and_sync(
+                    subsession=i,
+                    track_args=track_args,
+                    sync_args=sync_args,
+                    sync_distance_func=distance_function
+                )
+            )
         )
 
     if output_file is None:
@@ -53,294 +405,6 @@ def main(root_dir: PathLike,
         csv_writer = csv.writer(f)
         csv_writer.writerow(["session_id", "first_note", "last_note"])
         csv_writer.writerows(timestamps_list)
-
-
-def timestamps_spec(subsession: Session,
-                    notes_index: Optional[Tuple[int, int]] = None,
-                    sample_rate: Optional[int] = None,
-                    frame_size: Optional[int] = None,
-                    hop_size: Optional[int] = None,
-                    window_size: Optional[int] = None,
-                    _dist_func=None,
-                    stride: Optional[int] = None,
-                    search_period: Optional[int] = None,
-                    start_end_times: Optional[Tuple[float, float]] = None
-                    ) -> timestamps:
-    """
-    Get the timestamps for the first and last note given 2 audio files and a
-    midi file.
-
-    Uses the spectrogram between the two files, and finds the most likely
-    place where the notes are.
-
-    Parameters
-    ----------
-    start_end_times: To save time on processing, optionally provide the times
-        for the first and last notes in the aac file.
-    notes_index: A tuple containing indexes of first and last note of the
-        section to sync. Defaults to first and last notes (0, -1).
-    subsession: the session object containing at least the aac, flac, and midi
-        files.
-    sample_rate: the sample rate to use, should be the sample rate of the audio
-        being inputted.
-    frame_size: how large one frame should be when loading the audio
-    hop_size: how far between frames in the FramedSignal
-    window_size: size of window within which to compare
-    _dist_func: a custom distance function to be used when comparing
-        windows.
-    stride: how far to go between windows.
-    search_period: the period in seconds within which to search the aac file
-        at the start and end.
-
-    Returns a tuple with first entry being first note time and second entry
-    being second note time.
-    -------
-    """
-    if frame_size is None:
-        frame_size = 8372
-    if window_size is None:
-        window_size = 2000
-    if sample_rate is None:
-        sample_rate = 44100
-    if hop_size is None:
-        hop_size = int(np.round(sample_rate * 0.005))
-    if _dist_func is None:
-        _dist_func = _cos_dist
-    if search_period is None:
-        search_period = 120
-    if stride is None:
-        stride = 1
-    if notes_index is None:
-        notes_index = (0, -1)
-
-    if [i for i in [subsession.performance, subsession.flac.file,
-                    subsession.audio.file] if i is None]:
-        raise MissingSubsessionFilesError(
-            "Some files are missing from the session"
-        )
-
-    performance = subsession.performance
-    note_array = performance.note_array()
-
-    flac_signal = load_signal(
-        filepath=str(subsession.flac.file),
-        frame_size=frame_size,
-        hop_size=hop_size,
-        sample_rate=sample_rate,
-    )
-    aac_signal = load_signal(
-        filepath=str(subsession.audio.file),
-        frame_size=frame_size,
-        hop_size=hop_size,
-        sample_rate=sample_rate,
-    )
-
-    aac_frame_times = np.arange(
-        aac_signal.shape[0]
-    ) * (hop_size / sample_rate)
-
-    flac_frame_times = np.arange(
-        flac_signal.shape[0]
-    ) * (hop_size / sample_rate)
-
-    if start_end_times is None:
-        start_end_times = (0, aac_frame_times[-1])
-
-    first_frame = abs(
-        flac_frame_times - note_array["onset_sec"][notes_index[0]]).argmin()
-    last_frame = abs(
-        flac_frame_times - note_array["onset_sec"][notes_index[1]]).argmin()
-
-    if last_frame - first_frame < window_size:
-        raise IndexError("Window size is larger than the given section length."
-                         " Either reduce the window size, provide a longer "
-                         "section, or reduce the hop size.")
-
-    # The first window is generated from the first note on to avoid index
-    # errors with the start of the file
-    first_note_window = get_log_spect_window(
-        signal=flac_signal,
-        midpoint=first_frame + window_size // 2,
-        window_size=window_size
-    )
-    # The last window is generated up to the last note
-    # This is in order to avoid index errors when hitting the end of the file
-    last_note_window = get_log_spect_window(
-        signal=flac_signal,
-        midpoint=last_frame - window_size // 2,
-        window_size=window_size
-    )
-
-    first_note_full_window_limits = window_clip_check(
-        midpoint=start_end_times[0],
-        size=search_period,
-        frame_times=aac_frame_times
-    )
-    last_note_full_window_limits = window_clip_check(
-        midpoint=start_end_times[1],
-        size=search_period,
-        frame_times=aac_frame_times
-    )
-
-    aac_spect_first = get_spect_section(
-        signal=aac_signal,
-        start=first_note_full_window_limits[0],
-        end=first_note_full_window_limits[1]
-    )
-    aac_spect_last = get_spect_section(
-        signal=aac_signal,
-        start=last_note_full_window_limits[0],
-        end=last_note_full_window_limits[1]
-    )
-    aac_start_windows = create_windows(
-        arr=aac_spect_first,
-        stride=stride,
-        window_size=window_size,
-    )
-    aac_end_windows = create_windows(
-        arr=aac_spect_last,
-        stride=stride,
-        window_size=window_size,
-    )
-
-    first_distances = _dist_func(aac_start_windows, first_note_window)
-    last_distances = _dist_func(aac_end_windows, last_note_window)
-
-    first_note_aac_window = np.argmin(first_distances)
-    first_note_aac_frame = first_note_aac_window * stride
-    first_note_aac_time = aac_frame_times[first_note_full_window_limits[0] +
-                                          first_note_aac_frame]
-
-    last_note_aac_window = np.argmin(last_distances)
-    last_note_aac_frame = last_note_aac_window * stride + window_size
-    last_note_aac_time = aac_frame_times[last_note_full_window_limits[0] +
-                                         last_note_aac_frame]
-
-    return str(subsession.id), first_note_aac_time, last_note_aac_time
-
-
-def window_clip_check(midpoint: float,
-                      size: float,
-                      frame_times: npt.NDArray) -> Tuple[int, int]:
-    # Start and end times of first note window
-    start_time = max(midpoint - (size / 2), 0)
-    end_time = min(midpoint + (size / 2), frame_times[-1])
-
-    first_frame = abs(frame_times - start_time).argmin()
-    last_frame = abs(frame_times - end_time).argmin()
-
-    return first_frame, last_frame
-
-
-def load_signal(filepath: PathLike,
-                frame_size: int,
-                hop_size: int,
-                sample_rate: int) -> madmom.audio.signal.FramedSignal:
-    signal = madmom.audio.Signal(
-        filepath,
-        sample_rate=sample_rate,
-        num_channels=1,
-        norm=True,
-    )
-    f_signal = madmom.audio.FramedSignal(
-        signal=signal,
-        frame_size=frame_size,
-        hop_size=hop_size
-    )
-
-    return f_signal
-
-
-def get_log_spect_window(signal: madmom.audio.signal.FramedSignal,
-                         midpoint: int,
-                         window_size: int,
-                         spec_func=None) -> np.ndarray:
-    """
-    Generate a window from a signal and return it as a numpy array.
-    Uses the logarithmic filtered spectrogram by default.
-    """
-    if spec_func is None:
-        spec_func = madmom.audio.LogarithmicFilteredSpectrogram
-
-    return np.array(
-        spec_func(
-            signal[midpoint - window_size // 2:
-                   midpoint + window_size // 2][:]
-        )
-    )[:, 10:40]
-
-
-def get_spect_section(signal: madmom.audio.signal.FramedSignal,
-                      start: Optional[int] = None,
-                      end: Optional[int] = None,
-                      spec_func=None) -> np.ndarray:
-    """
-    Generate a certain section of the log_spectrogram given start and end
-    points. Uses the logarithmic filtered spectrogram by default.
-    If start/end points are none then the entire signal is used.
-    """
-    if start is None:
-        start = 0
-    if end is None:
-        end = signal.shape[0]
-    if spec_func is None:
-        spec_func = madmom.audio.LogarithmicFilteredSpectrogram
-
-    spec = np.array(
-        spec_func(
-            signal[start:end][:]
-        )
-    )[:, 10:40]
-
-    return spec
-
-
-def create_windows(arr: np.ndarray,
-                   stride: int,
-                   window_size: int,
-                   start: Optional[int] = None,
-                   end: Optional[int] = None
-                   ) -> np.ndarray:
-    """
-    Create views into a given array corresponding to a sliding window.
-    If no start or end is given, then the start/end of the given array is
-    used.
-    Parameters
-    ----------
-    arr: array to be indexed
-    stride: how far to move the window
-    window_size: size of window
-    start: where to start indexing
-    end: where to end indexing
-    """
-    if start is None:
-        start = 0
-    if end is None:
-        end = arr.shape[0]
-
-    sub_window_ids = (
-            start +
-            np.expand_dims(np.arange(window_size), 0) +
-            np.expand_dims(np.arange(
-                end - start - window_size, step=stride), 0).T
-    )
-
-    return arr[sub_window_ids, :]
-
-
-def _manhatten_dist(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    diff = np.abs(a - b)
-    sums = np.sum(diff, axis=(1, 2))
-    return sums
-
-
-def _cos_dist(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    """
-    Get cos distance between two windows. Could be better optimized bit it's
-    already quite fast.
-    """
-    b = b.flatten()
-    return np.array([sp.distance.cosine(x.flatten(), b) for x in a[:]])
 
 
 if __name__ == "__main__":
@@ -436,7 +500,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.distance_function == "manhatten":
-        dist_func = _manhatten_dist
+        dist_func = Sync.manhatten_dist
     else:
         dist_func = None
 

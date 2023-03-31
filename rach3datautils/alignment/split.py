@@ -2,15 +2,17 @@ from partitura.performance import Performance
 import argparse
 from pathlib import Path
 from typing import Optional, Union, List, Tuple
-from rach3datautils.dataset_utils import DatasetUtils
+from rach3datautils.utils.dataset_utils import DatasetUtils
 from rach3datautils.exceptions import MissingSubsessionFilesError
-from rach3datautils.video_audio_tools import AudioVideoTools
+from rach3datautils.utils.video_audio_tools import AudioVideoTools
 from rach3datautils.backup_files import PathLike
 from rach3datautils.session import Session
-from rach3datautils.alignment.sync import timestamps_spec
+from rach3datautils.alignment.sync import load_and_sync
 import os
 import numpy as np
+import numpy.typing as npt
 from tqdm import tqdm
+
 
 timestamps = Tuple[float, float]
 note_sections = Tuple[int, int]
@@ -89,7 +91,7 @@ def split_video_and_flac(
         output_dir=output_dir,
         overwrite=overwrite,
         reencode=True  # For some reason, the splits end up being slightly
-    )                  # off sometimes if we don't re-encode
+    )  # off sometimes if we don't re-encode
 
 
 class Splits:
@@ -97,13 +99,29 @@ class Splits:
     Class containing functions for calculating splits using midi files.
     """
     BREAK_SIZE = 5
-    MIN_SECTION_SIZE = 20
+    MIN_SECTION_SIZE = 60
+    MAX_SECTION_SIZE = 180
+
+    def __init__(self,
+                 break_size: Optional[int] = None,
+                 min_section_size: Optional[int] = None,
+                 max_section_size: Optional[int] = None):
+        if break_size is None:
+            break_size = self.BREAK_SIZE
+        if min_section_size is None:
+            min_section_size = self.MIN_SECTION_SIZE
+        if max_section_size is None:
+            max_section_size = self.MAX_SECTION_SIZE
+
+        self.break_size = break_size
+        self.min_section_size = min_section_size
+        self.max_section_size = max_section_size
 
     def get_split_points_sync(
             self,
             session: Session,
-            break_size: Optional[Union[float, int]] = None) -> \
-            List[timestamps]:
+            break_size: Optional[Union[float, int]] = None
+    ) -> List[timestamps]:
         """
         Calculate split points in seconds for an aac/video and flac file using
         the sync function to identify correct start and end times for each
@@ -139,39 +157,47 @@ class Splits:
             performance=session.performance,
             breaks=break_notes
         )
+        sections = self.check_section_lengths(
+            note_array=session.performance.note_array(),
+            sections=section_notes
+        )
 
-        first_last_times = timestamps_spec(
+        first_last_times = load_and_sync(
             subsession=session,
-            notes_index=(0, -1),
-            search_period=180,
-            window_size=100,
-            hop_size=int(np.round(44100 * 0.1))
+            sync_args={"notes_index": (0, -1),
+                       "search_period": 180,
+                       "window_size": 100},
+            track_args={"hop_size": int(np.round(44100 * 0.1))}
         )
         note_array = session.performance.note_array()
+        first_time = note_array['onset_sec'][0]
 
         section_times: List[timestamps] = []
-        for i in section_notes:
-            start_time = first_last_times[1] + note_array['onset_sec'][i[0]]
-            end_time = first_last_times[1] + note_array['onset_sec'][i[1]]
+        for i in sections:
+            start_note = note_array['onset_sec'][i[0]] - first_time
+            start_time = first_last_times[0] + start_note
 
-            times = timestamps_spec(
+            end_note = (note_array['onset_sec'][i[1]] +
+                        note_array['duration_sec'][i[1]]) - first_time
+            end_time = first_last_times[0] + end_note
+
+            times = load_and_sync(
                 subsession=session,
-                notes_index=(i[0], i[1]),
-                search_period=10,
-                start_end_times=(start_time, end_time),
-                window_size=1000,
-                hop_size=int(np.round(44100 * 0.005))
-            )[1:]
-
+                sync_args={"notes_index": (i[0], i[1]),
+                           "search_period": 15,
+                           "start_end_times": (start_time, end_time),
+                           "window_size": 1000},
+                track_args={"hop_size": int(np.round(44100 * 0.005))}
+            )
             section_times.append(times)
 
         return section_times
 
-    def breaks_to_sections(self,
-                           performance: Performance,
-                           breaks: List[Tuple[int, int]],
-                           min_section_size: Optional[int] = None) -> \
-            List[note_sections]:
+    @staticmethod
+    def breaks_to_sections(
+            performance: Performance,
+            breaks: List[Tuple[int, int]]
+    ) -> List[note_sections]:
         """
         Take a list with the output from find_breaks and convert it so that
         the notes are pointing to the start and end of the sections between
@@ -181,26 +207,73 @@ class Splits:
 
         Parameters
         ----------
-        min_section_size: the minimum amount of notes required in a section
         performance: Partitura performance
         breaks: output from break_notes
 
         Returns a list containing start and end of sections
         -------
         """
-        if min_section_size is None:
-            min_section_size = self.MIN_SECTION_SIZE
-
         prev_note: int = 0
         sections: List[note_sections] = []
         for i in breaks:
-            if i[0] - prev_note < min_section_size:
-                continue
             sections.append((prev_note, i[0]))
             prev_note = i[1]
 
         sections.append((prev_note, len(performance.note_array()) - 1))
 
+        return sections
+
+    def check_section_lengths(
+            self,
+            note_array: npt.NDArray,
+            sections: List[note_sections]
+    ) -> List[note_sections]:
+        """
+        Check the lengths of sections to make sure they are within the limits
+        set by max_section_len and min_section_len.
+        """
+        new_sections: List[note_sections] = []
+        last_note = sections[0][0]
+        for i in sections:
+            sect_len = note_array["onset_sec"][i[1]] - \
+                       note_array["onset_sec"][last_note]
+            if sect_len < self.min_section_size:
+                continue
+            elif sect_len > self.max_section_size:
+                shorter_sections = self._check_max_len(
+                    note_array=note_array,
+                    prev_note=last_note,
+                    end_note=i[1]
+                )
+                last_len = note_array["onset_sec"][shorter_sections[-1][1]] - \
+                    note_array["onset_sec"][shorter_sections[-1][0]]
+                if last_len < self.min_section_size:
+                    shorter_sections.pop(-1)
+
+                new_sections.extend(shorter_sections)
+
+            else:
+                new_sections.append((last_note, i[1]))
+
+            last_note = i[1]
+
+        return new_sections
+
+    def _check_max_len(self,
+                       note_array: npt.NDArray,
+                       prev_note: int,
+                       end_note: int):
+        sect_time = note_array["onset_sec"][end_note] - \
+                    note_array["onset_sec"][prev_note]
+        sect_len = end_note - prev_note
+        if sect_time > self.max_section_size:
+            midpoint = prev_note + sect_len // 2
+            sections = [(prev_note, midpoint)]
+            sections.extend(self._check_max_len(note_array,
+                                                midpoint,
+                                                end_note))
+        else:
+            return [(prev_note, end_note)]
         return sections
 
     @staticmethod
@@ -213,7 +286,8 @@ class Splits:
         timestamp_list: List[timestamps] = []
         for i in sections:
             first_time = note_array['onset_sec'][i[0]]
-            last_time = note_array['onset_sec'][i[1]]
+            last_time = note_array['onset_sec'][i[1]] + \
+                note_array['duration_sec'][i[1]]
             timestamp_list.append((first_time, last_time))
 
         return timestamp_list
@@ -245,6 +319,10 @@ class Splits:
         breaks = self.breaks_to_sections(
             performance=midi,
             breaks=breakpoints,
+        )
+        breaks = self.check_section_lengths(
+            note_array=midi.note_array(),
+            sections=breaks,
         )
         breaks = self.convert_to_timestamps(breaks, performance=midi)
 

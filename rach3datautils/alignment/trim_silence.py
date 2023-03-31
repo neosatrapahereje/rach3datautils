@@ -1,10 +1,10 @@
-from typing import Optional, List, Dict
+from typing import Optional, List
 import argparse
-from rach3datautils.dataset_utils import DatasetUtils
-from rach3datautils.video_audio_tools import AudioVideoTools
+from rach3datautils.utils.dataset_utils import DatasetUtils
+from rach3datautils.utils.video_audio_tools import AudioVideoTools
 from rach3datautils.backup_files import PathLike
 from rach3datautils.session import Session
-from rach3datautils.alignment.sync import timestamps_spec
+from rach3datautils.alignment.sync import load_and_sync
 from rach3datautils.exceptions import MissingSubsessionFilesError
 from pathlib import Path
 import numpy as np
@@ -26,6 +26,8 @@ def main(root_dir: PathLike,
     if output_dir.suffix:
         raise AttributeError("Output directory should not have a suffix as "
                              "it is a directory.")
+    if not output_dir.exists():
+        output_dir.mkdir()
 
     dataset = DatasetUtils(root_path=root_dir)
 
@@ -72,26 +74,30 @@ def trim(subsession: Session,
     # To improve speed and reduce ram usage, we run a large search with low
     # accuracy, and then we do a second more focussed search with good
     # accuracy to get the exact locations.
-    _, start_time, end_time = timestamps_spec(
+    start_time, end_time = load_and_sync(
         subsession=subsession,
-        notes_index=(0, -1),
-        search_period=180,
-        window_size=100,
-        hop_size=int(np.round(44100 * 0.1))
+        sync_args={
+            "notes_index": (0, -1),
+            "search_period": 100,
+            "window_size": 100,
+        },
+        track_args={"hop_size": int(np.round(44100 * 0.1))}
     )
-    timestamps = timestamps_spec(
+    timestamps = load_and_sync(
         subsession=subsession,
-        notes_index=(0, -1),
-        search_period=3,
-        start_end_times=(start_time, end_time),
-        window_size=500,
-        hop_size=int(np.round(44100 * 0.0025))
+        sync_args={
+            "notes_index": (0, -1),
+            "search_period": 3,
+            "start_end_times": (start_time, end_time),
+            "window_size": 500
+        },
+        track_args={"hop_size": int(np.round(44100 * 0.0025))}
     )
 
     AudioVideoTools.extract_section(file=subsession.video.file,
                                     output_file=output_file,
-                                    start=timestamps[1]-padding,
-                                    end=timestamps[2]+padding)
+                                    start=timestamps[0]-padding,
+                                    end=timestamps[1]+padding)
 
 
 if __name__ == "__main__":
