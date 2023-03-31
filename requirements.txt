@@ -1,8 +1,8 @@
-setuptools==67.6.0
+setuptools==67.6.1
 numpy~=1.24.2
 scipy==1.10.1
 packaging~=23.0
-madmom
+git+https://github.com/CPJKU/madmom@main#egg=madmom
 Cython~=0.29.33
 partitura==1.2.1
 tqdm==4.65.0

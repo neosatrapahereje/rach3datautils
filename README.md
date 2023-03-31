@@ -12,7 +12,7 @@ pip install -r requirements.txt
 ```
  - Install rach3datautils in develop mode:
 ```
-python -m pip install -e .
+pip install -e .
 ```
  - Put ```RACH3DATAUTILS_DEBUG=True``` in a .env file in project root 
    to see additional debug info when running.
