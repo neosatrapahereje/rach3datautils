@@ -1,0 +1,249 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+import numpy as np
+from typing import Dict
+import re
+
+from rach3datautils.backup_files import get_video_hash
+from rach3datautils.misc import PathLike
+
+vname_pat = re.compile(
+    "([A-Za-z]+)_([0-9]{4})-([0-9]{2})-([0-9]{2})_w([0-9]{2})_([A-Za-z]+)_v([0-9]{2})_p([0-9]{3}).mp4"
+)
+
+VIDEO_DIRS = [
+    "/Volumes/Rach3DataMain/RawVideos/GoPro/Rach3",
+    "/Volumes/Rach3DataMain/RawVideos/GoPro/Warmup",
+]
+
+FILENAME = "/Users/carlos/Documents/Rach3Journal/video_hash.txt"
+
+
+class VideoLogInfo(object):
+    """
+    Get Info from the name of the video
+    """
+
+    def __init__(
+        self,
+        content,
+        year,
+        month,
+        day,
+        week,
+        video_position,
+        vnum,
+        vpart,
+    ) -> None:
+
+        self.content = content
+        self.year = year
+        self.month = month
+        self.day = day
+        self.week = week
+        self.video_position = video_position
+        self.vnum = vnum
+        self.vpart = vpart
+
+    def __lt__(self, vinfo):
+
+        if self.year < vinfo.year:
+            return True
+
+        if self.month < vinfo.month:
+            return True
+
+        if self.day < vinfo.day:
+            return True
+
+        if self.content < vinfo.content:
+            return True
+
+        if self.video_position < vinfo.video_position:
+            return True
+
+        if self.vnum < vinfo.vnum:
+            return True
+
+        if self.vpart < vinfo.vpart:
+            return True
+
+        return False
+
+    def __le__(self, vinfo):
+        if self.year <= vinfo.year:
+            return True
+
+        if self.month <= vinfo.month:
+            return True
+
+        if self.day <= vinfo.day:
+            return True
+
+        if self.content <= vinfo.content:
+            return True
+
+        if self.video_position <= vinfo.video_position:
+            return True
+
+        if self.vnum <= vinfo.vnum:
+            return True
+
+        if self.vpart <= vinfo.vpart:
+            return True
+
+        return False
+
+    def __gt__(self, vinfo):
+        if self.year > vinfo.year:
+            return True
+
+        if self.month > vinfo.month:
+            return True
+
+        if self.day > vinfo.day:
+            return True
+
+        if self.content > vinfo.content:
+            return True
+
+        if self.video_position > vinfo.video_position:
+            return True
+
+        if self.vnum > vinfo.vnum:
+            return True
+
+        if self.vpart > vinfo.vpart:
+            return True
+
+        return False
+
+    def __ge__(self, vinfo):
+
+        if self.year >= vinfo.year:
+            return True
+
+        if self.month >= vinfo.month:
+            return True
+
+        if self.day >= vinfo.day:
+            return True
+
+        if self.content >= vinfo.content:
+            return True
+
+        if self.video_position >= vinfo.video_position:
+            return True
+
+        if self.vnum >= vinfo.vnum:
+            return True
+
+        if self.vpart >= vinfo.vpart:
+            return True
+
+        return False
+
+    def __eq__(self, vinfo):
+
+        crit = all(
+            [
+                getattr(self, attr) == getattr(vinfo, attr)
+                for attr in [
+                    "content",
+                    "year",
+                    "month",
+                    "day",
+                    "week",
+                    "video_position",
+                    "vnum",
+                    "vpart",
+                ]
+            ]
+        )
+        return crit
+
+    def __ne__(self, vinfo):
+        crit = any(
+            [
+                getattr(self, attr) != getattr(vinfo, attr)
+                for attr in [
+                    "content",
+                    "year",
+                    "month",
+                    "day",
+                    "week",
+                    "video_position",
+                    "vnum",
+                    "vpart",
+                ]
+            ]
+        )
+        return crit
+
+
+def get_info_from_filename(filename):
+
+    info = vname_pat.search(filename)
+
+    if info is not None:
+        content, year, month, day, week, video_position, vnum, vpart = info.groups()
+
+        vinfo = VideoLogInfo(
+            content=content,
+            year=int(year),
+            month=int(month),
+            day=int(day),
+            week=int(week),
+            video_position=video_position,
+            vnum=int(vnum),
+            vpart=int(vpart),
+        )
+
+        return vinfo
+
+    return None
+
+
+def load_hashes(filename: PathLike = FILENAME) -> Dict[str, str]:
+
+    data = np.loadtxt(
+        fname=filename,
+        dtype=str,
+        delimiter="\t",
+        comments="#",
+    )
+
+    # Load hashed files
+    hashes = dict([(video[0], video[1]) for video in data])
+
+    return hashes
+
+
+if __name__ == "__main__":
+
+    vinfo1 = VideoLogInfo(
+        content="rach3",
+        year=2022,
+        month=8,
+        day=31,
+        week=10,
+        video_position="keyboard",
+        vnum=1,
+        vpart=1,
+    )
+
+    vinfo2 = VideoLogInfo(
+        content="rach3",
+        year=2022,
+        month=8,
+        day=31,
+        week=10,
+        video_position="keyboard",
+        vnum=1,
+        vpart=1,
+    )
+
+    print(vinfo1 == vinfo2)
+
+    hashes = load_hashes()
+    get_video_hash(FILENAME, VIDEO_DIRS)

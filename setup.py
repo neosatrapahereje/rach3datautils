@@ -22,6 +22,8 @@ REQUIRED = ["partitura", "ffmpeg-python", "tqdm", "numpy", "madmom", "scipy",
 # Optional
 EXTRAS = {}
 
+SCRIPTS = ["bin/R3GetVideoHash"]
+
 here = os.path.abspath(os.path.dirname(__file__))
 
 try:
@@ -54,6 +56,7 @@ setup(
     install_requires=REQUIRED,
     extras_require=EXTRAS,
     include_package_data=True,
+    scripts=SCRIPTS,
     # license="Apache 2.0",
     classifiers=[
         # Trove classifiers
