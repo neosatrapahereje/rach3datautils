@@ -1,9 +1,11 @@
+import warnings
+import partitura as pt
 import ffmpeg
 import os
 from partitura.performance import Performance
 from pathlib import Path
 import tempfile
-from rach3datautils.misc import PathLike
+from rach3datautils.extra.hashing import PathLike
 from rach3datautils.config import DEBUG
 from typing import Optional, Union, overload, Literal
 import shutil
@@ -14,10 +16,10 @@ else:
     LOGLEVEL = "quiet"
 
 
-class AudioVideoTools:
+class MultimediaTools:
     """
     Contains useful ffmpeg pipelines for working with audio and video, as well
-    as other utility functions.
+    as other utility functions for working with midi files.
     """
     @staticmethod
     def extract_audio(filepath: Path, output: Path = None,
@@ -314,6 +316,7 @@ class AudioVideoTools:
         """
         Get the duration of a file by decoding its audio. This will yield more
         accurate results than get_len.
+
         Returns length in seconds
         """
         ffmpeg_in = ffmpeg.input(file).audio
@@ -333,3 +336,12 @@ class AudioVideoTools:
         time = sum([j * float(i) for i, j in zip(time, [60*60, 60, 1])])
 
         return time
+
+    @staticmethod
+    def load_performance(file: PathLike) -> pt.performance.Performance:
+        """
+        Load a midi performance as a partitura performance object.
+        """
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            return pt.load_performance_midi(file)

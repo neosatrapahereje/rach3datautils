@@ -1,25 +1,14 @@
 import os
 import filecmp
-import re
 import datetime
 import glob
 from tqdm import tqdm
 import numpy as np
 from typing import Union
-from rach3datautils.misc import PathLike, get_md5_hash
-
+from rach3datautils.extra.hashing import PathLike, get_md5_hash
+from rach3datautils.utils.path import PathUtils
 from typing import Optional, List
-
-
-date_pat = re.compile(r"_([0-9]{4})-([0-9]{2})-([0-9]{2})_")
-
-
-def check_extension(filename: PathLike, ext: str) -> bool:
-    """
-    True if the extension of the file is the same as the one specified
-    """
-    file_ext = os.path.splitext(filename)[-1]
-    return file_ext == f".{ext}"
+from pathlib import Path
 
 
 def backup_dir(
@@ -28,16 +17,13 @@ def backup_dir(
     filetype: Optional[str] = None,
     cut_by_date: Optional[str] = None,
 ):
-    def by_extension(filename):
-        return check_extension(filename=filename, ext=filetype)
+    def by_extension(filename: Path):
+        return PathUtils.check_extension(filename=filename, ext=filetype)
 
     def by_date(filename):
-
-        date_info = date_pat.search(filename)
-
-        if date_info is not None:
-            isodate = "-".join(date_info.groups())
-            date = datetime.date.fromisoformat(isodate)
+        date = PathUtils.get_date(filename)
+        isodate = "-".join(date)
+        date = datetime.date.fromisoformat(isodate)
 
         return True
 
@@ -55,11 +41,13 @@ def backup_dir(
     if filetype is not None:
 
         in_dir1_not_in_dir2 = filter(
-            lambda x: check_extension(x, filetype), in_dir1_not_in_dir2
+            lambda x: PathUtils.check_extension(Path(x), filetype),
+            in_dir1_not_in_dir2
         )
 
         in_dir2_not_in_dir1 = filter(
-            lambda x: check_extension(x, filetype), in_dir2_not_in_dir1
+            lambda x: PathUtils.check_extension(Path(x), filetype),
+            in_dir2_not_in_dir1
         )
 
     for fn in in_dir1_not_in_dir2:
@@ -113,7 +101,6 @@ def load_hash_file(filepath: PathLike) -> dict[str, str]:
     """
     Load a file with video hashes in it.
     """
-
     data = np.loadtxt(
         fname=filepath,
         dtype=str,

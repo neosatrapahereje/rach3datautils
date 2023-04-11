@@ -10,9 +10,9 @@ following from the project root:
 ```
 pip install -r requirements.txt
 ```
- - Install rach3datautils in develop mode:
+ - Install rach3datautils with extras in develop mode:
 ```
-pip install -e .
+pip install -e .[EXTRA]
 ```
  - Put ```RACH3DATAUTILS_DEBUG=True``` in a .env file in project root 
    to see additional debug info when running.

@@ -1,11 +1,11 @@
 from pathlib import Path
-from rach3datautils.utils.path_utils import PathUtils
-from rach3datautils.misc import PathLike
+from rach3datautils.utils.path import PathUtils
+from rach3datautils.extra.hashing import PathLike
 from rach3datautils.exceptions import IdentityError
+from rach3datautils.utils.multimedia import MultimediaTools
 from typing import Union, Optional, List, Tuple, Literal
 from partitura.performance import Performance
-import partitura as pt
-import warnings
+
 
 
 full_session_id = Tuple[str, str]
@@ -194,14 +194,11 @@ class Session:
 
         return self._performance
 
-    def _load_performance_from_midi(self):
+    def _load_performance_from_midi(self) -> Union[Performance, None]:
         midi_filepath = self.midi.file
         if midi_filepath is None:
             return
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            self._performance = pt.load_performance_midi(
-                self.midi.file)
+        self._performance = MultimediaTools.load_performance(midi_filepath)
 
     def set_unknown(self, value: Union[PathLike, list[PathLike]]) -> bool:
         """

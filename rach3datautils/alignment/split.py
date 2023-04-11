@@ -1,49 +1,17 @@
 from partitura.performance import Performance
-import argparse
 from pathlib import Path
 from typing import Optional, Union, List, Tuple
-from rach3datautils.utils.dataset_utils import DatasetUtils
-from rach3datautils.exceptions import MissingSubsessionFilesError
-from rach3datautils.utils.video_audio_tools import AudioVideoTools
-from rach3datautils.backup_files import PathLike
-from rach3datautils.session import Session
+from rach3datautils.exceptions import MissingFilesError
+from rach3datautils.utils.multimedia import MultimediaTools
+from rach3datautils.extra.backup_files import PathLike
+from rach3datautils.utils.session import Session
 from rach3datautils.alignment.sync import load_and_sync
-import os
 import numpy as np
 import numpy.typing as npt
-from tqdm import tqdm
 
 
 timestamps = Tuple[float, float]
 note_sections = Tuple[int, int]
-
-
-def main(root_dir: PathLike,
-         output_dir: PathLike,
-         overwrite: bool):
-    """
-    Detect pauses in playing based on midi file, and split audio at these
-    pauses. The aim is to reduce time drifting between the video file and flac
-    file.
-    """
-    output_dir = Path(output_dir)
-
-    if output_dir.suffix:
-        raise AttributeError("output_dir must be a path to a valid directory")
-
-    if not output_dir.exists():
-        os.mkdir(output_dir)
-
-    dataset = DatasetUtils(root_dir)
-    subsessions = dataset.get_sessions(filetype=[".mid", ".mp4", ".flac",
-                                                 ".aac"])
-
-    for i in tqdm(subsessions):
-        split_video_and_flac(
-            subsession=i,
-            overwrite=overwrite,
-            output_dir=output_dir
-        )
 
 
 def split_video_and_flac(
@@ -61,8 +29,8 @@ def split_video_and_flac(
     required = [subsession.midi.file, subsession.video.file,
                 subsession.flac.file]
     if [i for i in required if i is None]:
-        raise MissingSubsessionFilesError("Midi and video are required for "
-                                          "split_video to function.")
+        raise MissingFilesError("Midi and video are required for split_video "
+                                "to function.")
 
     if not isinstance(output_dir, Path):
         output_dir: Path = Path(output_dir)
@@ -143,11 +111,11 @@ class Splits:
 
         if [i for i in [session.audio.file, session.performance,
                         session.flac.file] if i is None]:
-            raise MissingSubsessionFilesError("get_split_points_sync requires"
-                                              " a midi and audio file to "
-                                              "be present in the session.")
+            raise MissingFilesError("get_split_points_sync requires a midi "
+                                    "and audio file to be present in the "
+                                    "session.")
 
-        break_notes = AudioVideoTools().find_breaks(
+        break_notes = MultimediaTools().find_breaks(
             midi=session.performance,
             length=break_size,
             return_notes=True
@@ -163,7 +131,9 @@ class Splits:
         )
 
         first_last_times = load_and_sync(
-            subsession=session,
+            flac=session.flac.file,
+            performance=session.performance,
+            audio=session.audio.file,
             sync_args={"notes_index": (0, -1),
                        "search_period": 180,
                        "window_size": 100},
@@ -182,7 +152,9 @@ class Splits:
             end_time = first_last_times[0] + end_note
 
             times = load_and_sync(
-                subsession=session,
+                flac=session.flac.file,
+                audio=session.audio.file,
+                performance=session.performance,
                 sync_args={"notes_index": (i[0], i[1]),
                            "search_period": 15,
                            "start_end_times": (start_time, end_time),
@@ -311,7 +283,7 @@ class Splits:
         if break_size is None:
             break_size = self.BREAK_SIZE
 
-        breakpoints = AudioVideoTools.find_breaks(
+        breakpoints = MultimediaTools.find_breaks(
             midi=midi,
             length=break_size,
             return_notes=True
@@ -342,7 +314,7 @@ def split_at_timestamps(splits: list,
         if output_path_video.exists() and not overwrite:
             return
 
-        AudioVideoTools.extract_section(
+        MultimediaTools.extract_section(
             file=file,
             start=start,
             end=end,
@@ -363,37 +335,3 @@ def calc_splits(breakpoints: list,
         splits.append((prev_point, prev_point + difference))
         prev_point = prev_point + difference
     return splits
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        prog="Midi Based Video and Audio Splitter",
-        description="Split video and audio files where there are breaks in "
-                    "the music based on a midi file."
-    )
-    parser.add_argument(
-        "-d", "--root_directory",
-        action="store",
-        help="Root directory of the dataset. If not set, the"
-             "current working folder is used.",
-        required=True
-    )
-    parser.add_argument(
-        "-w", "--overwrite",
-        action="store_true",
-        help="Whether to overwrite the files if they already"
-             "exist."
-    )
-    parser.add_argument(
-        "-o", "--output_directory",
-        action="store",
-        help="Directory where to store output files.",
-        default="./audio_split/"
-    )
-    args = parser.parse_args()
-
-    main(
-        root_dir=args.root_directory,
-        overwrite=args.overwrite,
-        output_dir=args.output_directory
-    )

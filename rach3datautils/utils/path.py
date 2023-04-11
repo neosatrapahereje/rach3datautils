@@ -67,12 +67,20 @@ class PathUtils:
         Get the date from a given file in format yyyy_mm_dd.
         Raises an attribute error if a date cannot be found.
         """
-        for i in file.stem.split("_"):
-            if re.search(pattern="^\\d{4}-\\d{2}-\\d{2}$",
-                         string=i):
-                return i
-        raise AttributeError("Date could not be identified from the given "
-                             "file.")
+        date_pat = re.compile(r"([0-9]{4})-([0-9]{2})-([0-9]{2})")
+        search = date_pat.search(file.name)
+        if search is None:
+            raise AttributeError("Date could not be identified from the given "
+                                 "file.")
+        date = search.group()
+        return date
+
+    @staticmethod
+    def check_extension(filename: Path, ext: str) -> bool:
+        """
+        True if the extension of the file is the same as the one specified
+        """
+        return filename.suffix == f".{ext}"
 
     @staticmethod
     def is_full_audio(file: Path) -> bool:

@@ -3,7 +3,7 @@
 
 import io
 import os
-from setuptools import find_packages, setup, Command
+from setuptools import setup
 
 # Package meta-data.
 NAME = "rach3datautils"
@@ -16,11 +16,13 @@ REQUIRES_PYTHON = ">=3.9"
 VERSION = "0.0.1"
 
 # Required packages
-REQUIRED = ["partitura", "ffmpeg-python", "tqdm", "numpy", "madmom", "scipy",
-            "python-dotenv"]
+REQUIRED = ["partitura", "ffmpeg-python", "numpy", "madmom", "scipy"]
 
 # Optional
-EXTRAS = {}
+extra = ["filedate", "tqdm", "python-dotenv"]
+EXTRAS = {
+    "EXTRA": extra,
+}
 
 SCRIPTS = ["bin/R3GetVideoHash"]
 

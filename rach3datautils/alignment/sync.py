@@ -1,16 +1,12 @@
 import madmom
-from rach3datautils.utils import dataset_utils
-from rach3datautils.exceptions import MissingSubsessionFilesError
+from rach3datautils.exceptions import MissingFilesError
 import numpy as np
 import numpy.typing as npt
-from typing import Tuple, Optional, List, TypedDict
-from rach3datautils.backup_files import PathLike
-from rach3datautils.utils.dataset_utils import Session
-import argparse as ap
-from pathlib import Path
+from typing import Tuple, Optional, TypedDict
+from rach3datautils.extra.backup_files import PathLike
 import scipy.spatial as sp
-import csv
-from tqdm import tqdm
+from partitura.performance import Performance
+
 
 # (session ID, first note, last note)
 time_section = Tuple[float, float]
@@ -40,7 +36,7 @@ class Track:
     """
     FRAME_SIZE = 8372
     SAMPLE_RATE = 44100
-    HOP_SIZE = int(np.round(SAMPLE_RATE * 0.005))
+    HOP_SIZE = int(np.round(SAMPLE_RATE * 0.025))
 
     def __init__(self,
                  filepath: PathLike,
@@ -140,8 +136,8 @@ class Sync:
     A class containing all necessary functions for syncing two audios based on
     their spectrograms and a midi file synced to one audio.
     """
-    WINDOW_SIZE = 2000
-    SEARCH_PERIOD = 120
+    WINDOW_SIZE = 500
+    SEARCH_PERIOD = 180
     STRIDE = 1
     NOTES_INDEX = (0, -1)
 
@@ -205,7 +201,7 @@ class Sync:
         last_note_time = note_array["onset_sec"][notes_index[1]] + \
             note_array["duration_sec"][notes_index[1]]
 
-        window_time = synced_track.frame_times[window_size]
+        window_time = synced_track.frame_times[self.window_size]
 
         # The first window is generated from the first note on to avoid index
         # errors with the start of the file
@@ -322,7 +318,9 @@ class Sync:
 
 
 def load_and_sync(
-        subsession: Session,
+        performance: Performance,
+        flac: PathLike,
+        audio: PathLike,
         track_args: Optional[TrackArgs] = None,
         sync_args: Optional[SyncArgs] = None,
         sync_distance_func: Optional = None
@@ -331,188 +329,23 @@ def load_and_sync(
     Function that handles loading flac and audio from a subsession and then
     syncing them using the Sync and Track objects respectively.
     """
-    if [i for i in [subsession.performance, subsession.flac.file,
-                    subsession.audio.file] if i is None]:
-        raise MissingSubsessionFilesError(
+    if [i for i in [performance, flac, audio] if i is None]:
+        raise MissingFilesError(
             "Some files are missing from the session"
         )
 
     sync = Sync(distance_func=sync_distance_func)
     flac = Track(
-        filepath=subsession.flac.file,
+        filepath=flac,
         **track_args
     )
     aac = Track(
-        filepath=subsession.audio.file,
+        filepath=audio,
         **track_args
     )
     return sync.calc_timestamps(
         synced_track=flac,
         nonsynced_track=aac,
-        note_array=subsession.performance.note_array(),
+        note_array=performance.note_array(),
         **sync_args
-    )
-
-
-def main(root_dir: PathLike,
-         notes_index: Optional[Tuple[int, int]] = None,
-         output_file: Optional[PathLike] = None,
-         frame_size: Optional[int] = None,
-         hop_size: Optional[int] = None,
-         window_size: Optional[int] = None,
-         distance_function: Optional = None,
-         sample_rate: Optional[int] = None,
-         stride: Optional[int] = None,
-         search_period: Optional[int] = None):
-    """
-    Wrapper function for get_timestamps that handles loading files and saving
-    output to a file if specified. Useful when running this file as a script.
-    """
-    dataset = dataset_utils.DatasetUtils(root_path=Path(root_dir))
-
-    sessions = dataset.get_sessions([".mid", ".aac", ".flac"])
-
-    track_args = {
-        "sample_rate": sample_rate,
-        "frame_size": frame_size,
-        "hop_size": hop_size
-    }
-    sync_args = {
-        "notes_index": notes_index,
-        "window_size": window_size,
-        "stride": stride,
-        "search_period": search_period
-    }
-    timestamps_list: List[timestamps] = []
-    for i in tqdm(sessions):
-        timestamps_list.append(
-            (
-                str(i),
-                load_and_sync(
-                    subsession=i,
-                    track_args=track_args,
-                    sync_args=sync_args,
-                    sync_distance_func=distance_function
-                )
-            )
-        )
-
-    if output_file is None:
-        print(timestamps_list)
-        return
-
-    with open(output_file, "w") as f:
-        csv_writer = csv.writer(f)
-        csv_writer.writerow(["session_id", "first_note", "last_note"])
-        csv_writer.writerows(timestamps_list)
-
-
-if __name__ == "__main__":
-    parser = ap.ArgumentParser(
-        prog="Audio Synchronizer",
-        description="Use midi data and spectral analysis to find timestamps "
-                    "corresponding to the same note in 2 different audio "
-                    "files."
-    )
-    parser.add_argument(
-        "-d", "--root-dir",
-        action="store",
-        required=True,
-        help="The root directory containing midi, flac, and mp3 files.",
-        type=str
-    )
-    parser.add_argument(
-        "-fs", "--frame-size",
-        action="store",
-        required=False,
-        default=None,
-        help="Frame size when loading the FramedSignal object.",
-        type=int
-    )
-    parser.add_argument(
-        "-hs", "--hop-size",
-        action="store",
-        required=False,
-        default=None,
-        help="Hop size to use when generating FramedSignal object",
-        type=int
-    )
-    parser.add_argument(
-        "-ws", "--window-size",
-        action="store",
-        required=False,
-        default=None,
-        help="Window size to use when calculating distances.",
-        type=int
-    )
-    parser.add_argument(
-        "-ds", "--distance-function",
-        action="store",
-        required=False,
-        default=None,
-        help="Distance function to use, defaults to cosine.",
-        type=str
-    )
-    parser.add_argument(
-        "-s", "--stride",
-        action="store",
-        required=False,
-        default=None,
-        help="How many samples to move the window center between windows.",
-        type=int
-    )
-    parser.add_argument(
-        "-sp", "--search-period",
-        action="store",
-        required=False,
-        default=None,
-        help="How many seconds at the start and end to look through, smaller "
-             "values mean faster performance and less likely to return an "
-             "incorrect result. However if the first note isn't in the search "
-             "period specified it wont be found.",
-        type=int
-    )
-    parser.add_argument(
-        "-sr", "--sample-rate",
-        action="store",
-        required=False,
-        default=None,
-        help="Sample rate to use when loading the audio files.",
-        type=int
-    )
-    parser.add_argument(
-        "-o", "--output-file",
-        action="store",
-        required=False,
-        default=None,
-        help="Where to store outputs as csv, if not set will just print the "
-             "results.",
-        type=str
-    )
-    parser.add_argument(
-        "-ns", "--notes-index",
-        action="store",
-        required=False,
-        default=None,
-        help="What notes to look for, defaults to first and last.",
-        type=str
-    )
-    args = parser.parse_args()
-
-    if args.distance_function == "manhatten":
-        dist_func = Sync.manhatten_dist
-    else:
-        dist_func = None
-
-    main(
-        root_dir=args.root_dir,
-        notes_index=args.notes_index,
-        frame_size=args.frame_size,
-        hop_size=args.hop_size,
-        window_size=args.window_size,
-        distance_function=dist_func,
-        stride=args.stride,
-        search_period=args.search_period,
-        sample_rate=args.sample_rate,
-        output_file=args.output_file
     )
