@@ -23,6 +23,7 @@ def split_video_flac_mid(
     """
     Split video, flac, and midi files from the same session based on breaks
     in playing and maximum section sizes.
+
     Parameters
     ----------
     audio : Path
@@ -426,6 +427,7 @@ def split_midi_at_timestamps(splits: List[timestamps],
                              file: Path):
     """
     Split a performance and save it to midi files.
+
     Parameters
     ----------
     splits : List[timestamps]

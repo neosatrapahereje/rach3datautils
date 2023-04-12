@@ -15,9 +15,10 @@ def extract_and_concat(session: Session,
     """
     Extract audio from videos and concatenate both audios and videos into one
     file for each subsession.
+
     Parameters
     ----------
-    reencode
+    reencode : bool, optional
     session : Session
         Subsession object
     output : Path
