@@ -3,7 +3,7 @@ from collections import defaultdict
 from typing import Union, Literal, List
 from rach3datautils.utils.session import Session, SessionIdentity
 from rach3datautils.utils.path import PathUtils, suffixes_list, suffixes
-from rach3datautils.extra.hashing import PathLike
+from rach3datautils.types import PathLike
 
 
 valid_input_filetypes = Union[list[suffixes], suffixes, Literal["*"]]

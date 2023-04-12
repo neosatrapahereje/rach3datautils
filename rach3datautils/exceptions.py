@@ -9,7 +9,7 @@ class IdentityError(Exception):
 
 class MissingFilesError(Exception):
     """
-    Raised when there are files missing from a subsession that are expected
-    to be there.
+    Raised when there are files missing that are expected to be there. Usually
+    this means the file is missing from the subsection.
     """
     ...

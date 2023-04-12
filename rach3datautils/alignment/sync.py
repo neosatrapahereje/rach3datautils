@@ -1,9 +1,10 @@
 import madmom
+from madmom.audio.signal import FramedSignal
 from rach3datautils.exceptions import MissingFilesError
 import numpy as np
 import numpy.typing as npt
 from typing import Tuple, Optional, TypedDict
-from rach3datautils.extra.backup_files import PathLike
+from rach3datautils.types import PathLike
 import scipy.spatial as sp
 from partitura.performance import Performance
 
@@ -43,6 +44,18 @@ class Track:
                  frame_size: Optional[int] = None,
                  sample_rate: Optional[int] = None,
                  hop_size: Optional[float] = None):
+        """
+        Parameters
+        ----------
+        filepath: PathLike
+            path to the track including filename
+        frame_size: Optional[int]
+            track frame size to use when loading, default: 8372
+        sample_rate: Optional[int]
+            sample rate to be used when loading, default: 44100
+        hop_size: Optional[float]
+            essentially the resolution, default: 1102
+        """
         if frame_size is None:
             frame_size = self.FRAME_SIZE
         if sample_rate is None:
@@ -53,7 +66,7 @@ class Track:
         self.hop_size = hop_size
         self.sample_rate = sample_rate
 
-        self.signal: madmom.audio.signal.FramedSignal = self.load_signal(
+        self.signal: FramedSignal = self.load_framed_signal(
             filepath=filepath,
             frame_size=frame_size,
             hop_size=hop_size,
@@ -65,19 +78,55 @@ class Track:
         """
         Get the closest frame to a certain timestamp is seconds. Inverse of
         gettime.
+
+        Parameters
+        ----------
+        time: float
+            timestamp in seconds
+
+        Returns
+        -------
+        frame: int
+            the frame index closest to the time given
         """
         return abs((self.frame_times - time)).argmin()
 
     def calc_frame_times(self) -> npt.NDArray:
+        """
+        Calculate the frame times of the signal.
+
+        Returns
+        -------
+        frame_times: npt.NDArray
+            has an index for every frame at which you can see the time
+        """
         return np.arange(
             self.signal.shape[0]
         ) * (self.hop_size / self.sample_rate)
 
     @staticmethod
-    def load_signal(filepath: PathLike,
-                    frame_size: int,
-                    hop_size: int,
-                    sample_rate: int) -> madmom.audio.signal.FramedSignal:
+    def load_framed_signal(filepath: PathLike,
+                           frame_size: int,
+                           hop_size: int,
+                           sample_rate: int) -> FramedSignal:
+        """
+        Load a file into a signal.
+
+        Parameters
+        ----------
+        filepath: PathLike
+            path to audio file
+        frame_size: int
+            frame size to use when loading the Signal
+        hop_size: int
+            hop size to use when loading the FramedSignal
+        sample_rate: int
+            sample rate to use when loading the Signal
+
+        Returns
+        -------
+        framed_signal: FramedSignal
+        """
         signal = madmom.audio.Signal(
             str(filepath),
             sample_rate=sample_rate,
@@ -107,6 +156,21 @@ class Track:
         spectrogram_clip specifies the start and end of the frequency bands
         index, useful for reducing ram usage and improving performance if you
         don't need the whole range of frequency bands.
+
+        Parameters
+        ----------
+        start: Optional[float]
+            start time in seconds
+        end: Optional[float]
+            end time in seconds
+        spectrogram_clip: Optional[Tuple[int, int]]
+            tuple of indexes. Frequency bands within these
+            indexes will be kept.
+
+        Returns
+        -------
+        start_end_spectrogram: Tuple[time_section, npt.NDArray]
+            exact start and end times of spectrogram, spectrogram
         """
         if start is None:
             start = 0
@@ -134,7 +198,7 @@ class Track:
 class Sync:
     """
     A class containing all necessary functions for syncing two audios based on
-    their spectrograms and a midi file synced to one audio.
+    their spectrogram's and a midi file synced to one audio.
     """
     WINDOW_SIZE = 500
     SEARCH_PERIOD = 180
@@ -143,6 +207,13 @@ class Sync:
 
     def __init__(self,
                  distance_func: Optional = None):
+        """
+        Parameters
+        ----------
+        distance_func: Optional[func]
+            optionally specify a custom distance function.
+            Default is cos.
+        """
         if distance_func is None:
             distance_func = self.cos_dist
 
@@ -169,21 +240,32 @@ class Sync:
 
         Parameters
         ----------
-        note_array: note array synced with synced_track
-        window_size: Size of windows generated within search_period in samples
-        nonsynced_track: track that is not synced to midi
-        synced_track: Track synced to the midi
-        start_end_times: To save time on processing, optionally provide the
-            times for the first and last notes in the aac file.
-        notes_index: A tuple containing indexes of first and last note of the
-            section to sync. Defaults to first and last notes (0, -1).
-        stride: how far to go between windows.
-        search_period: the period in seconds within which to search the aac
-            file at the start and end.
+        note_array: npt.NDArray
+            note array synced with synced_track
+        window_size: Optional[int]
+            Size of windows generated within search_period in samples
+            Default: 500
+        nonsynced_track: Track
+            track that is not synced to midi
+        synced_track: Track
+            Track synced to the midi
+        start_end_times: Optional[time_section]
+            To save time on processing, optionally provide the
+            times for the first and last notes in the aac file
+        notes_index: Optional[Tuple[int, int]]
+            A tuple containing indexes of first and last note of the
+            section to sync. Default: (0, -1)
+        stride: Optional[int]
+            how far to go between windows. Default: 1
+        search_period: Optional[int]
+            the period in seconds within which to search the aac
+            file at the start and end. Default: 180
 
-        Returns a tuple with first entry being first note time and second entry
-        being second note time.
+        Returns
         -------
+        time_section: Tuple[float, float]
+            first entry being first note time and second entry being second
+            note time.
         """
         if window_size is not None:
             self.window_size = window_size
@@ -259,6 +341,21 @@ class Sync:
         """
         Generate windows within 2 given boundaries. Returns the windows and
         the start and end points of the boundaries.
+
+        Parameters
+        ----------
+        track: Track
+            the Track object
+        section_size: float
+            size of the section is seconds
+        section_midpoint: float
+            midpoint of section in seconds
+
+        Returns
+        -------
+        time_section_windows: Tuple[time_section, npt.NDArray]
+            contains start and end times of section and a numpy array with
+            all windows.
         """
         if self.window_size is None or self.stride is None:
             raise AttributeError("window_size and stride are undefined")
@@ -273,7 +370,7 @@ class Sync:
         return (start, end), windows
 
     def create_windows(self,
-                       arr: np.ndarray,
+                       arr: npt.NDArray,
                        start: Optional[int] = None,
                        end: Optional[int] = None
                        ) -> npt.NDArray:
@@ -281,11 +378,21 @@ class Sync:
         Create views into a given array corresponding to a sliding window.
         If no start or end is given, then the start/end of the given array is
         used.
+
         Parameters
         ----------
-        arr: array to be indexed
-        start: where to start indexing
-        end: where to end indexing
+        arr: npt.NDArray
+            array to be indexed
+        start: Optional[int]
+            where to start indexing
+        end: Optional[int]
+            where to end indexing
+
+        Returns
+        -------
+        windows: npt.NDArray
+            dim 0 is all windows, dims 1 and 2 are the actual window
+            dimensions.
         """
         if start is None:
             start = 0
@@ -309,10 +416,6 @@ class Sync:
 
     @staticmethod
     def cos_dist(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-        """
-        Get cos distance between two windows. Could be better optimized bit
-        it's already fast enough anyway.
-        """
         b = b.flatten()
         return np.array([sp.distance.cosine(x.flatten(), b) for x in a[:]])
 
@@ -328,6 +431,27 @@ def load_and_sync(
     """
     Function that handles loading flac and audio from a subsession and then
     syncing them using the Sync and Track objects respectively.
+
+    Parameters
+    ----------
+    performance: Performance
+        subsession Performance object
+    flac: PathLike
+        subsession flac filepath
+    audio: PathLike
+        subsession audio filepath
+    track_args: Optional[TrackArgs]
+        optional args to be passed to the Track object
+    sync_args: Optional[SyncArgs]
+        optional args to be passed to the Sync object
+    sync_distance_func: Optional[func]
+        optional custom distance function
+
+    Returns
+    -------
+    time_section: Tuple[float, float]
+        tuple containing timestamps of first and last note in the
+        audio file
     """
     if [i for i in [performance, flac, audio] if i is None]:
         raise MissingFilesError(

@@ -1,14 +1,10 @@
 """
 Miscellaneous utilities
 """
-import os
 import subprocess
 import hashlib
-from typing import Union
 import platform
-
-# Recommended by PEP 519
-PathLike = Union[str, bytes, os.PathLike]
+from rach3datautils.types import PathLike
 
 
 def get_md5_hash(filename: PathLike) -> str:
@@ -19,9 +15,12 @@ def get_md5_hash(filename: PathLike) -> str:
     Parameters
     ----------
     filename: PathLike
-        Path to the file.
+        path to the file
 
-    Returns the hash of the file
+    Returns
+    -------
+    md5_hash: str
+        hash of the file given
     """
     system = platform.system()
     try:
@@ -71,7 +70,8 @@ def _get_md5_hash_darwin(filename: PathLike) -> str:
 
 def _get_md5_hash_linux(filename: PathLike) -> str:
     """
-    MD5 hash calculation for Linux systems, relies on md5sum being installed.
+    MD5 hash calculation for Linux systems, relies on md5sum being installed,
+    which should be the case on most distros.
     """
     command = ["md5sum", filename]
     checksum_process = subprocess.run(

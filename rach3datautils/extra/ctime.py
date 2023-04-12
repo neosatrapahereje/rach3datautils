@@ -1,6 +1,6 @@
 import datetime
 import filedate
-from rach3datautils.extra.hashing import PathLike
+from rach3datautils.types import PathLike
 from typing import Union
 
 
@@ -13,9 +13,14 @@ def change_creation_time(
 
     Parameters
     ----------
-    filename : PathLike
-        Path to the file.
+    filename: PathLike
+        path to the file
     creation_time: str or datetime.datetime
+        new creation time to set
+
+    Returns
+    -------
+    None
     """
     if isinstance(creation_time, str):
 

@@ -1,6 +1,7 @@
 import argparse as ap
 from rach3datautils.utils.dataset import DatasetUtils
-from rach3datautils.alignment.sync import load_and_sync, Sync, timestamps
+from rach3datautils.alignment.sync import load_and_sync, Sync
+from rach3datautils.types import timestamps
 from pathlib import Path
 from typing import List
 from tqdm import tqdm

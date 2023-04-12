@@ -18,14 +18,20 @@ def extract_and_concat(session: Session,
     Parameters
     ----------
     reencode
-    session: Subsession object
-    output: Where to output file
-    audio: Whether to do subsession audio
-    video: Whether to do subsession video
-    overwrite: Whether to overwrite already existing files
+    session: Session
+        Subsession object
+    output: Path
+        Where to output file
+    audio: Optional[bool]
+        Whether to do subsession audio
+    video: Optional[bool]
+        Whether to do subsession video
+    overwrite: Optional[bool]
+        Whether to overwrite already existing files
 
-    Returns None
+    Returns
     -------
+    None
     """
     if overwrite is None:
         overwrite = False
@@ -111,5 +117,4 @@ def _aac_concat(session: Session,
         overwrite=overwrite,
         reencode=reencode
     )
-
     session.audio.file = output

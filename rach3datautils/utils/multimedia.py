@@ -1,14 +1,17 @@
 import warnings
-import partitura as pt
-import ffmpeg
-import os
-from partitura.performance import Performance
-from pathlib import Path
-import tempfile
-from rach3datautils.extra.hashing import PathLike
-from rach3datautils.config import DEBUG
-from typing import Optional, Union, overload, Literal
+from typing import Optional, Union, overload, Literal, List
 import shutil
+from pathlib import Path
+import os
+import tempfile
+import ffmpeg
+import partitura as pt
+from partitura.utils.music import slice_ppart_by_time
+from partitura.performance import PerformedPart
+from partitura.performance import Performance
+from rach3datautils.types import PathLike, timestamps
+from rach3datautils.config import DEBUG
+
 
 if DEBUG:
     LOGLEVEL = "debug"
@@ -106,23 +109,23 @@ class MultimediaTools:
     @staticmethod
     @overload
     def find_breaks(
-            midi: Performance, length: float,
+            performance: Performance, length: float,
             return_notes: Literal[True]) -> list[tuple[int, int]]:
         ...
 
     @staticmethod
     @overload
     def find_breaks(
-            midi: Performance, length: float,
+            performance: Performance, length: float,
             return_notes: Optional[Literal[False]] = None) -> \
             list[tuple[float, float]]:
         ...
 
     @staticmethod
-    def find_breaks(midi: Performance,
+    def find_breaks(performance: Performance,
                     length: float,
-                    return_notes: Optional[bool] = None) -> \
-            list[Union[tuple[float, float], tuple[int, int]]]:
+                    return_notes: Optional[bool] = None) -> List[
+            Union[tuple[float, float], tuple[int, int]]]:
         """
         Take a midi performance partitura object and find spots where nothing
         was played for the period of time specified.
@@ -134,14 +137,18 @@ class MultimediaTools:
         Parameters
         ----------
         return_notes: bool, whether to return the note indexes instead of times
-        midi: the midi performance object
+        performance: the midi performance object
         length: how many seconds nothing was played
+
+        Returns
         -------
+        List[Tuple]: each tuple contains start and end times/notes for the
+            sections
         """
         if return_notes is None:
             return_notes = False
 
-        note_array = midi.note_array()
+        note_array = performance.note_array()
         if len(note_array.shape) != 1:
             raise AttributeError("Midi files with more than one track are "
                                  "unsupported.")
@@ -345,3 +352,30 @@ class MultimediaTools:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             return pt.load_performance_midi(file)
+
+    @staticmethod
+    def split_performance(performance: PerformedPart,
+                          split_points: List[timestamps]) -> \
+            List[PerformedPart]:
+        """
+        Take a performance and section timestamps and return a list of
+        performances based on the timestamps.
+        Parameters
+        ----------
+        performance: Partitura performance
+        split_points: timestamps showing start and end of sections
+
+        Returns
+        -------
+        a list of sub-performances
+        """
+        subperformances: List[PerformedPart] = []
+        for i in split_points:
+            subperformances.append(
+                slice_ppart_by_time(
+                    ppart=performance,
+                    start_time=i[0],
+                    end_time=i[1]
+                )
+            )
+        return subperformances

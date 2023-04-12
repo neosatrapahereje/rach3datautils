@@ -1,14 +1,15 @@
 from pathlib import Path
 from rach3datautils.utils.path import PathUtils
-from rach3datautils.extra.hashing import PathLike
+from rach3datautils.types import PathLike
 from rach3datautils.exceptions import IdentityError
 from rach3datautils.utils.multimedia import MultimediaTools
 from typing import Union, Optional, List, Tuple, Literal
 from partitura.performance import Performance
 
 
-
-full_session_id = Tuple[str, str]
+full_session_id = Tuple[str, str]  # (date, subsession_no)
+# A file can either be composed of many parts, "multi", or just be one part
+# "single"
 session_file_types = Literal["multi", "single"]
 
 

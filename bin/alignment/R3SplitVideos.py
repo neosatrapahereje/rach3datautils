@@ -2,7 +2,7 @@ import argparse as ap
 from pathlib import Path
 from tqdm import tqdm
 import os
-from rach3datautils.alignment.split import split_video_and_flac
+from rach3datautils.alignment.split import split_video_flac_mid
 from rach3datautils.utils.dataset import DatasetUtils
 
 
@@ -46,10 +46,8 @@ subsessions = dataset.get_sessions(filetype=[".mid", ".mp4", ".flac",
                                              ".aac"])
 
 for i in tqdm(subsessions):
-    split_video_and_flac(
+    split_video_flac_mid(
         subsession=i,
         overwrite=args.overwrite,
         output_dir=output_dir
     )
-
-

@@ -9,7 +9,7 @@ from tqdm import tqdm
 from rach3datautils.utils.dataset import DatasetUtils
 import tempfile
 from rach3datautils.alignment.extract_and_concat import extract_and_concat
-from rach3datautils.alignment.split import split_video_and_flac
+from rach3datautils.alignment.split import split_video_flac_mid
 
 
 parser = ap.ArgumentParser(
@@ -66,8 +66,12 @@ with tempfile.TemporaryDirectory(dir="../") as tempdir:
                 reencode=args.reencode
             )
         [subsession.set_unknown(i) for i in concat_outputs]
-        split_video_and_flac(
-            subsession=subsession,
+        split_video_flac_mid(
+            midi=subsession.midi.file,
+            flac=subsession.flac.file,
+            audio=subsession.audio.file,
+            performance=subsession.performance,
+            video=subsession.video.file,
             output_dir=output_dir,
             overwrite=args.overwrite
         )

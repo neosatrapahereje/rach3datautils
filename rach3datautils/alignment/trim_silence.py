@@ -1,6 +1,6 @@
 from typing import Optional
 from rach3datautils.utils.multimedia import MultimediaTools
-from rach3datautils.extra.backup_files import PathLike
+from rach3datautils.types import PathLike
 from rach3datautils.alignment.sync import load_and_sync
 from rach3datautils.exceptions import MissingFilesError
 import numpy as np
@@ -17,6 +17,28 @@ def trim(audio: PathLike,
     """
     Trim the silence from the start and end of a video based on given
     midi and flac files and output to the output file specified.
+
+    Parameters
+    ----------
+    audio: PathLike
+        subsession audio filepath
+    flac: PathLike
+        subsession flac filepath
+    midi: PathLike
+        subsession midi filepath
+    video: PathLike
+        subsession video filepath
+    performance: Performance
+        subsession performance filepath
+    output_file: PathLike
+        where to output the new file including filename
+    padding: Optional[float]
+        an amount in seconds to add around the first and last note.
+        Default is 1
+
+    Returns
+    -------
+    None
     """
     if padding is None:
         padding = 1.

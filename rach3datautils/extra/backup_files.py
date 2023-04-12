@@ -4,10 +4,10 @@ import datetime
 import glob
 from tqdm import tqdm
 import numpy as np
-from typing import Union
-from rach3datautils.extra.hashing import PathLike, get_md5_hash
+from rach3datautils.extra.hashing import get_md5_hash
+from rach3datautils.types import PathLike
 from rach3datautils.utils.path import PathUtils
-from typing import Optional, List
+from typing import Optional, List, Union
 from pathlib import Path
 
 
@@ -100,6 +100,16 @@ def get_video_hash(filename: PathLike, video_dirs: List[PathLike]) -> None:
 def load_hash_file(filepath: PathLike) -> dict[str, str]:
     """
     Load a file with video hashes in it.
+
+    Parameters
+    ----------
+    filepath: PathLike
+        Path to the file containing hashes
+
+    Returns
+    -------
+    hash_dict: Dict[str, str]
+        A dictionary containing the filename and associated hash
     """
     data = np.loadtxt(
         fname=filepath,
@@ -111,11 +121,25 @@ def load_hash_file(filepath: PathLike) -> dict[str, str]:
     return dict([(video[0], video[1]) for video in data])
 
 
-def check_hashes(hash_file: PathLike, video_dirs: list[PathLike]) -> \
+def check_hashes(hash_file: PathLike, video_dirs: List[PathLike]) -> \
         Union[bool, list]:
     """
     Given a file with video hashes, check hashes against video files in given
     directory.
+
+    Parameters
+    ----------
+    hash_file: PathLike
+        file containing hashes
+    video_dirs: List[PathLike]
+        directory with videos to be hashed
+
+    Returns
+    -------
+    True:
+        if all hashes match
+    mismatch_list: List[videos]
+        A list of files with mismatching hashes
     """
     hashes = load_hash_file(hash_file)
     mismatched: list[str] = []
