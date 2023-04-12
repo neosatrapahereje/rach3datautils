@@ -32,7 +32,16 @@ class SessionIdentity:
     @staticmethod
     def get_file_identity(file: Path) -> full_session_id:
         """
-        Returns the identity of a file in the form (date, subsession_no)
+        Returns the identity of a given file.
+
+        Parameters
+        ----------
+        file : Path
+
+        Returns
+        -------
+        full_session_id : Tuple[str, str]
+            contains (date, subsession_no)
         """
 
         date = PathUtils.get_date(file)
@@ -45,7 +54,19 @@ class SessionIdentity:
         Check if the identity of a file matches with the currently set one.
         If no identity has been set it will be set based on the given file.
 
-        Raises IdentityError if the identity does not match the stored one.
+        Parameters
+        ----------
+        file : Path
+
+        Returns
+        -------
+        bool
+
+        Raises
+        ------
+        IdentityError
+            if the identity of the given file does not match with the current
+            stored identity
         """
         file_id = self.get_file_identity(file)
 
@@ -62,6 +83,19 @@ class SessionIdentity:
         """
         Set the identity from a given file. Raises IdentityError if file
         cannot be identified.
+
+        Parameters
+        ----------
+        file : Path
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        IdentityError
+            if the file cannot be identified
         """
         date, subsession_no = self.get_file_identity(file)
 
@@ -89,12 +123,34 @@ class SessionFile:
     def __init__(self,
                  identity: SessionIdentity,
                  file_type: session_file_types):
-
+        """
+        Parameters
+        ----------
+        identity : SessionIdentity
+        file_type : session_file_types
+        """
         self.id: SessionIdentity = identity
         self.type: str = file_type
         self._file_list: List[Optional[Path]] = []
+        self._splits_list: List[Optional[Path]] = []
         self._file: Optional[Path] = None
         self._trimmed: Optional[Path] = None
+
+    def _list_type_setter(self, value):
+        values = [Path(i) for i in value]
+        if not values:
+            return
+
+        [self.id.check_identity(i) for i in values]
+        self._file_list = value
+
+    @property
+    def splits_list(self) -> List[Optional[Path]]:
+        return self._splits_list
+
+    @splits_list.setter
+    def splits_list(self, value: List[Optional[PathLike]]):
+        self._list_type_setter(value=value)
 
     @property
     def file_list(self) -> List[Optional[Path]]:
@@ -105,12 +161,7 @@ class SessionFile:
         if self.type != "multi":
             return
 
-        values = [Path(i) for i in value]
-        if not values:
-            return
-
-        [self.id.check_identity(i) for i in values]
-        self._file_list = value
+        self._list_type_setter(value=value)
 
     @property
     def file(self) -> Path:
@@ -155,6 +206,7 @@ class Session:
         - Checks that all files are from the same session
     """
     LIST_PATH_KEYS = ["video", "audio"]
+    SPLIT_KEYS = ["split_flac", "split_midi", "split_video"]
     PATH_KEYS = ["full_midi", "full_flac", "full_video", "full_audio"]
 
     def __init__(self, audio: Optional[SessionFile] = None,
@@ -165,6 +217,14 @@ class Session:
         """
         Initializes session, optionally takes a custom SessionDict. The
         session identifier is required.
+
+        Parameters
+        ----------
+        audio : SessionFile, optional
+        video : SessionFile, optional
+        midi : SessionFile, optional
+        flac : SessionFile, optional
+        performance : Performance, optional
         """
         self.id = SessionIdentity()
 
@@ -187,8 +247,16 @@ class Session:
     def performance(self) -> Performance:
         """
         Get the partitura performance object. If it does not exist it will be
-        loaded from the midi file. If the midi file has not been specified
-        an AttributeError will be raised.
+        loaded from the midi file.
+
+        Returns
+        -------
+        performance : Performance
+
+        Raises
+        ------
+        AttributeError
+            if no midi file is present within the session
         """
         if self._performance is None:
             self._load_performance_from_midi()
@@ -208,10 +276,13 @@ class Session:
 
         Parameters
         ----------
-        value: unknown path to add to session
+        value : PathLike or List of PathLike
+            unknown path to add to session
 
-        Returns bool, whether the operation was successful
+        Returns
         -------
+        bool
+            whether the operation was successful
         """
         if not isinstance(value, list):
             value = [value]
@@ -223,6 +294,10 @@ class Session:
 
             if filetype == "trimmed_video":
                 self.video.trimmed = file
+
+            if filetype in self.SPLIT_KEYS:
+                attribute: SessionFile = getattr(self, filetype[6:])
+                attribute.splits_list.append(file)
 
             if filetype in self.LIST_PATH_KEYS:
                 attribute: SessionFile = getattr(self, filetype)
@@ -237,7 +312,21 @@ class Session:
         return True
 
     def sort_videos(self):
+        """
+        Sort the videos within the session in chronological order.
+
+        Returns
+        -------
+        None
+        """
         self.video.file_list.sort(key=PathUtils.get_fileno_p)
 
     def sort_audios(self):
+        """
+        Sort the audios within the session in chronological order
+
+        Returns
+        -------
+        None
+        """
         self.audio.file_list.sort(key=PathUtils.get_fileno_p)

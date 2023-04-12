@@ -18,15 +18,15 @@ def extract_and_concat(session: Session,
     Parameters
     ----------
     reencode
-    session: Session
+    session : Session
         Subsession object
-    output: Path
+    output : Path
         Where to output file
-    audio: Optional[bool]
+    audio : bool, optional
         Whether to do subsession audio
-    video: Optional[bool]
+    video : bool, optional
         Whether to do subsession video
-    overwrite: Optional[bool]
+    overwrite : bool, optional
         Whether to overwrite already existing files
 
     Returns

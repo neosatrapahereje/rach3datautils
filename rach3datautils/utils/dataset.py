@@ -1,6 +1,6 @@
 from pathlib import Path
 from collections import defaultdict
-from typing import Union, Literal, List
+from typing import Union, Literal, List, Optional
 from rach3datautils.utils.session import Session, SessionIdentity
 from rach3datautils.utils.path import PathUtils, suffixes_list, suffixes
 from rach3datautils.types import PathLike
@@ -14,12 +14,13 @@ class DatasetUtils:
     Utilities for working with the rach3 dataset.
     """
 
-    def __init__(self, root_path: Union[PathLike, List[PathLike]] = None):
+    def __init__(self, root_path: Optional[Union[PathLike,
+                                           List[PathLike]]] = None):
         """
         Parameters
         ----------
-        root_path: root path of dataset. if not specified, defaults to working
-                   folder.
+        root_path : PathLike or List[PathLike], optional
+            root path of dataset. Default is "./"
         """
         if root_path is None:
             root_path: List[PathLike] = ["./"]
@@ -32,13 +33,16 @@ class DatasetUtils:
                           filetype: valid_input_filetypes) -> list[Path]:
         """
         Get all files in dataset based on filetype (mp4, midi, etc)
-        Accepts any special symbols glob would accept such as *. Optionally
-        specify a list of filetypes for multiple.
+        Also accepts "*". Optionally specify a list of filetypes.
 
         Parameters
         ----------
-        filetype: .mp4, .midi, etc
+        filetype : valid_input_filetypes
+            .mp4, .mid, etc. or [".mp4", ".mid", ...]
+
+        Returns
         -------
+        files_list : List[Path]
         """
         # Limiting the scope is done in order to prevent unexpected files from
         # being returned.
@@ -64,22 +68,35 @@ class DatasetUtils:
 
         Parameters
         ----------
-        file_1: Path of first file
-        file_2: Path of second file
-        -------
-        """
+        file_1 : Path
+            Path of first file
+        file_2 : Path
+            Path of second file
 
+        Returns
+        -------
+        bool
+            whether the two files are from the same session
+        """
         return PathUtils.get_session_no(file_1) == \
             PathUtils.get_session_no(file_2) and \
             PathUtils.get_date(file_1) == PathUtils.get_date(file_2)
 
     def get_sessions(self,
-                     filetype: valid_input_filetypes = None) -> List[Session]:
+                     filetype: Optional[valid_input_filetypes] = None) -> \
+            List[Session]:
         """
-        Returns a dictionary with all dates and sessions. Each key is one
-        session.
-
+        Returns a list with all sessions.
         Can optionally specify what filetype/s you want.
+
+        Parameters
+        ----------
+        filetype : valid_input_filetypes, optional
+            .mp4, .mid, etc. or [".mp4", ".mid", ...]. default is "*"
+
+        Returns
+        -------
+        session_list : List[Session]
         """
         if filetype is None:
             filetype = "*"
@@ -90,11 +107,18 @@ class DatasetUtils:
         return sessions
 
     @staticmethod
-    def sort_by_date_and_session(files: list[Path]) -> List[Session]:
+    def sort_by_date_and_session(files: List[Path]) -> List[Session]:
         """
         Take a list of files and sort them into Session objects.
-        """
 
+        Parameters
+        ----------
+        files : List[Path]
+
+        Returns
+        -------
+        session_list : List[Session]
+        """
         sorted_files = defaultdict(Session)
 
         for i in files:

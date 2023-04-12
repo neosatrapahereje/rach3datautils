@@ -29,8 +29,19 @@ class MultimediaTools:
                       overwrite: bool = False) -> Path:
         """
         Extract audio from a video file. Returns the filepath of the new audio
-        file. If no output is specified outputs the file in the same folder
+        file.
+        If no output is specified outputs the file in the same folder
         as the original video.
+
+        Parameters
+        ----------
+        filepath : Path
+        output : Path
+        overwrite : bool
+
+        Returns
+        -------
+        new_file : Path
         """
 
         if output is None:
@@ -51,16 +62,30 @@ class MultimediaTools:
         return output
 
     @staticmethod
-    def concat(files: list[Optional[Path]],
+    def concat(files: List[Optional[Path]],
                output: Path,
                overwrite: Optional[bool] = None,
-               reencode: Optional[bool] = None) -> Optional[Path]:
+               reencode: Optional[bool] = None) -> Union[Path, None]:
         """
         Takes a list of audio or video files and concatenates them into one
         file. They will be concatenated in the order present within the list.
-        Returns path to new audio file.
+
         If only one file is given, it will simply be copied to the output
         location.
+
+        Parameters
+        ----------
+        files : List[Optional[Path]]
+        output : Path
+        overwrite : bool, optional
+            default is False
+        reencode : bool, optional
+            default is False
+
+        Returns
+        -------
+        file_path : Path or None
+            None if no files were given
         """
         if overwrite is None:
             overwrite = False
@@ -136,14 +161,17 @@ class MultimediaTools:
 
         Parameters
         ----------
-        return_notes: bool, whether to return the note indexes instead of times
-        performance: the midi performance object
-        length: how many seconds nothing was played
+        return_notes : bool
+            whether to return the note indexes instead of times
+        performance : Performance
+            the midi performance object
+        length : float
+            how many seconds nothing was played
 
         Returns
         -------
-        List[Tuple]: each tuple contains start and end times/notes for the
-            sections
+        breaks_list : List[Union[Tuple[float, float], Tuple[int, int]]]
+            each tuple contains start and end times/notes for the sections
         """
         if return_notes is None:
             return_notes = False
@@ -169,38 +197,67 @@ class MultimediaTools:
         return breaks
 
     @staticmethod
-    def get_first_time(midi: Performance) -> float:
+    def get_first_time(performance: Performance) -> float:
         """
         Get the time of the first note in a performance.
+
+        Parameters
+        ----------
+        performance : Performance
+
+        Returns
+        -------
+        first_time : float
         """
-        note_array = midi.note_array()
+        note_array = performance.note_array()
         return note_array[0][0]
 
     @staticmethod
-    def get_last_time(midi: Performance) -> float:
+    def get_last_time(performance: Performance) -> float:
         """
         Get the timestamp when the last note was played.
+
+        Parameters
+        ----------
+        performance : Performance
+
+        Returns
+        -------
+        last_time : float
         """
-        note_array = midi.note_array()
+        note_array = performance.note_array()
         return note_array[-1][0]
 
     @staticmethod
-    def split_audio(audio_path: PathLike, split_start: float,
-                    split_end: float, output: Path,
-                    overwrite: bool = False) -> PathLike:
+    def split_audio(audio_path: PathLike,
+                    split_start: float,
+                    split_end: float,
+                    output: Path,
+                    overwrite: Optional[bool] = None) -> PathLike:
         """
         Extract a section of an audio file given start and end points.
 
         Parameters
         ----------
-        output: path where to output file
-        split_end: end of the split in seconds
-        audio_path: path to audio file as a Path or string
-        split_start: the place in seconds at which to split audio
-        overwrite: bool, whether to overwrite already existing files
+        output : Path
+            path where to output file
+        split_end : float
+            end of the split in seconds
+        audio_path : PathLike
+            path to audio file as a Path or string
+        split_start : float
+            the place in seconds at which to split audio
+        overwrite : bool, optional
+            bool, whether to overwrite already existing files
+
+        Returns
         -------
+        audio_file : PathLike
+            path of new audio file, the same as `output`
         """
-        # Only rewrite files if its explicitly stated
+        if overwrite is None:
+            overwrite = False
+
         if not output.suffix:
             raise AttributeError("Output must be a path to a file")
         elif output.is_file() and not overwrite:
@@ -213,14 +270,19 @@ class MultimediaTools:
         out = ffmpeg.overwrite_output(out)
         out.run()
 
+        return output
+
     def get_len(self, audio_path: PathLike) -> float:
         """
         Get the length in seconds of a media file.
 
         Parameters
         ----------
-        audio_path: path to audio file
+        audio_path : path to audio file
+
+        Returns
         -------
+        length : float
         """
         metadata = self.ff_probe(audio_path)
         duration = float(metadata["format"]["duration"])
@@ -231,31 +293,48 @@ class MultimediaTools:
         return ffmpeg.probe(filepath)
 
     @staticmethod
-    def delete_files(files: list[Path]) -> None:
+    def delete_files(files: List[Path]) -> None:
         """
-        Simply delete a list of files.
-        Parameters
+        Delete a list of files.
 
+        Parameters
         ----------
-        files: a list of filepaths to be deleted
+        files : List[Path]
+
+        Returns
         -------
+        None
         """
         [os.remove(i) for i in files]
 
     @staticmethod
-    def trim_silence(file: Path, output: Path,
-                     overwrite: bool = False, threshold: int = -20) -> None:
+    def trim_silence(file: Path,
+                     output: Path,
+                     overwrite: Optional[bool] = None,
+                     threshold: Optional[int] = None) -> None:
         """
         Trim silence at start and end of a given file.
 
         Parameters
         ----------
-        file: path to the file to trim
-        output: path to output file
-        overwrite: whether to overwrite an existing file
-        threshold: at what loudness level in decibels to detect sound
+        file : Path
+            path to the file to trim
+        output : Path
+            path to output file
+        overwrite : bool, optional
+            whether to overwrite an existing file, default is False
+        threshold : int, optional
+            at what loudness level in decibels to detect sound, default is -20
+
+        Returns
         -------
+        None
         """
+        if overwrite is None:
+            overwrite = False
+        if threshold is None:
+            threshold = -20
+
         if not output.suffix:
             raise AttributeError("Output must be a path to a file")
 
@@ -288,21 +367,27 @@ class MultimediaTools:
                         output_file: PathLike,
                         start: float,
                         end: float,
-                        reencode: Optional[bool] = None
-                        ):
+                        reencode: Optional[bool] = None):
         """
         Extract a section from a video given start and end points. Will
         overwrite files.
+
         Parameters
         ----------
-        reencode: whether to reencode the file or not
-        output_file: Where to output new section
-        file: the path to the video
-        start: the timestamp where to start the section from
-        end: the timestamp for where to end the section
+        reencode : bool, optional
+            whether to reencode the file or not
+        output_file : PathLike
+            Where to output new section
+        file : PathLike
+            the path to the video
+        start : float
+            the timestamp where to start the section from
+        end : float
+            the timestamp for where to end the section
 
-        Returns None
+        Returns
         -------
+        None
         """
         if reencode is None:
             reencode = False
@@ -324,7 +409,14 @@ class MultimediaTools:
         Get the duration of a file by decoding its audio. This will yield more
         accurate results than get_len.
 
-        Returns length in seconds
+        Parameters
+        ----------
+        file : PathLike
+
+        Returns
+        -------
+        file_len : float
+            in seconds
         """
         ffmpeg_in = ffmpeg.input(file).audio
         out = ffmpeg_in.output(filename="-", f='null')
@@ -348,32 +440,43 @@ class MultimediaTools:
     def load_performance(file: PathLike) -> pt.performance.Performance:
         """
         Load a midi performance as a partitura performance object.
+
+        Parameters
+        ----------
+        file : PathLike
+
+        Returns
+        -------
+        performance : partitura.performance.Performance
         """
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             return pt.load_performance_midi(file)
 
     @staticmethod
-    def split_performance(performance: PerformedPart,
+    def split_performance(performed_part: PerformedPart,
                           split_points: List[timestamps]) -> \
             List[PerformedPart]:
         """
         Take a performance and section timestamps and return a list of
-        performances based on the timestamps.
+        PerformedPart objects based on the timestamps.
+
         Parameters
         ----------
-        performance: Partitura performance
-        split_points: timestamps showing start and end of sections
+        performed_part : PerformedPart
+        split_points : List[timestamps]
+            timestamps showing start and end of sections
 
         Returns
         -------
-        a list of sub-performances
+        pp_list : List[PerformedPart]
+            a list of sub-performances
         """
         subperformances: List[PerformedPart] = []
         for i in split_points:
             subperformances.append(
                 slice_ppart_by_time(
-                    ppart=performance,
+                    ppart=performed_part,
                     start_time=i[0],
                     end_time=i[1]
                 )

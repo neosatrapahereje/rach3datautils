@@ -13,9 +13,9 @@ def change_creation_time(
 
     Parameters
     ----------
-    filename: PathLike
+    filename : PathLike
         path to the file
-    creation_time: str or datetime.datetime
+    creation_time : str or datetime.datetime
         new creation time to set
 
     Returns

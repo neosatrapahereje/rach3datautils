@@ -20,19 +20,19 @@ def trim(audio: PathLike,
 
     Parameters
     ----------
-    audio: PathLike
+    audio : PathLike
         subsession audio filepath
-    flac: PathLike
+    flac : PathLike
         subsession flac filepath
-    midi: PathLike
+    midi : PathLike
         subsession midi filepath
-    video: PathLike
+    video : PathLike
         subsession video filepath
-    performance: Performance
+    performance : Performance
         subsession performance filepath
-    output_file: PathLike
+    output_file : PathLike
         where to output the new file including filename
-    padding: Optional[float]
+    padding : float, optional
         an amount in seconds to add around the first and last note.
         Default is 1
 

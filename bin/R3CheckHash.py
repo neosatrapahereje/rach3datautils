@@ -20,3 +20,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     check_hashes(hash_file=args.hash_file, video_dirs=args.video_directory)
+
+

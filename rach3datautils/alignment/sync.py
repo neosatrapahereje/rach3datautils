@@ -47,13 +47,13 @@ class Track:
         """
         Parameters
         ----------
-        filepath: PathLike
+        filepath : PathLike
             path to the track including filename
-        frame_size: Optional[int]
+        frame_size : int, optional
             track frame size to use when loading, default: 8372
-        sample_rate: Optional[int]
+        sample_rate : int, optional
             sample rate to be used when loading, default: 44100
-        hop_size: Optional[float]
+        hop_size : float, optional
             essentially the resolution, default: 1102
         """
         if frame_size is None:
@@ -81,12 +81,12 @@ class Track:
 
         Parameters
         ----------
-        time: float
+        time : float
             timestamp in seconds
 
         Returns
         -------
-        frame: int
+        frame : int
             the frame index closest to the time given
         """
         return abs((self.frame_times - time)).argmin()
@@ -97,7 +97,7 @@ class Track:
 
         Returns
         -------
-        frame_times: npt.NDArray
+        frame_times : npt.NDArray
             has an index for every frame at which you can see the time
         """
         return np.arange(
@@ -114,18 +114,18 @@ class Track:
 
         Parameters
         ----------
-        filepath: PathLike
+        filepath : PathLike
             path to audio file
-        frame_size: int
+        frame_size : int
             frame size to use when loading the Signal
-        hop_size: int
+        hop_size : int
             hop size to use when loading the FramedSignal
-        sample_rate: int
+        sample_rate : int
             sample rate to use when loading the Signal
 
         Returns
         -------
-        framed_signal: FramedSignal
+        framed_signal : FramedSignal
         """
         signal = madmom.audio.Signal(
             str(filepath),
@@ -159,17 +159,17 @@ class Track:
 
         Parameters
         ----------
-        start: Optional[float]
+        start : float, optional
             start time in seconds
-        end: Optional[float]
+        end : float, optional
             end time in seconds
-        spectrogram_clip: Optional[Tuple[int, int]]
+        spectrogram_clip : Tuple[int, int], optional
             tuple of indexes. Frequency bands within these
             indexes will be kept.
 
         Returns
         -------
-        start_end_spectrogram: Tuple[time_section, npt.NDArray]
+        start_end_spectrogram : Tuple[time_section, npt.NDArray]
             exact start and end times of spectrogram, spectrogram
         """
         if start is None:
@@ -210,7 +210,7 @@ class Sync:
         """
         Parameters
         ----------
-        distance_func: Optional[func]
+        distance_func : func, optional
             optionally specify a custom distance function.
             Default is cos.
         """
@@ -240,30 +240,30 @@ class Sync:
 
         Parameters
         ----------
-        note_array: npt.NDArray
+        note_array : npt.NDArray
             note array synced with synced_track
-        window_size: Optional[int]
+        window_size : int, optional
             Size of windows generated within search_period in samples
             Default: 500
-        nonsynced_track: Track
+        nonsynced_track : Track
             track that is not synced to midi
-        synced_track: Track
+        synced_track : Track
             Track synced to the midi
-        start_end_times: Optional[time_section]
+        start_end_times : time_section, optional
             To save time on processing, optionally provide the
             times for the first and last notes in the aac file
-        notes_index: Optional[Tuple[int, int]]
+        notes_index : Tuple[int, int], optional
             A tuple containing indexes of first and last note of the
             section to sync. Default: (0, -1)
-        stride: Optional[int]
+        stride : int, optional
             how far to go between windows. Default: 1
-        search_period: Optional[int]
+        search_period : int, optional
             the period in seconds within which to search the aac
             file at the start and end. Default: 180
 
         Returns
         -------
-        time_section: Tuple[float, float]
+        time_section : Tuple[float, float]
             first entry being first note time and second entry being second
             note time.
         """
@@ -344,16 +344,16 @@ class Sync:
 
         Parameters
         ----------
-        track: Track
+        track : Track
             the Track object
-        section_size: float
+        section_size : float
             size of the section is seconds
-        section_midpoint: float
+        section_midpoint : float
             midpoint of section in seconds
 
         Returns
         -------
-        time_section_windows: Tuple[time_section, npt.NDArray]
+        time_section_windows : Tuple[time_section, npt.NDArray]
             contains start and end times of section and a numpy array with
             all windows.
         """
@@ -381,16 +381,16 @@ class Sync:
 
         Parameters
         ----------
-        arr: npt.NDArray
+        arr : npt.NDArray
             array to be indexed
-        start: Optional[int]
+        start : int, optional
             where to start indexing
-        end: Optional[int]
+        end : int, optional
             where to end indexing
 
         Returns
         -------
-        windows: npt.NDArray
+        windows : npt.NDArray
             dim 0 is all windows, dims 1 and 2 are the actual window
             dimensions.
         """
@@ -434,22 +434,22 @@ def load_and_sync(
 
     Parameters
     ----------
-    performance: Performance
+    performance : Performance
         subsession Performance object
-    flac: PathLike
+    flac : PathLike
         subsession flac filepath
-    audio: PathLike
+    audio : PathLike
         subsession audio filepath
-    track_args: Optional[TrackArgs]
+    track_args : TrackArgs, optional
         optional args to be passed to the Track object
-    sync_args: Optional[SyncArgs]
+    sync_args : SyncArgs, optional
         optional args to be passed to the Sync object
-    sync_distance_func: Optional[func]
+    sync_distance_func : func, optional
         optional custom distance function
 
     Returns
     -------
-    time_section: Tuple[float, float]
+    time_section : Tuple[float, float]
         tuple containing timestamps of first and last note in the
         audio file
     """
