@@ -55,12 +55,3 @@ def backup_dir(
     import pdb
 
     pdb.set_trace()
-
-
-if __name__ == "__main__":
-
-    dir1 = "/Volumes/Rach3Data_Main/LogicProjects/recordings_clean/midi"
-
-    dir2 = "/Users/carlos/Documents/Rach3Journal/LogicProjects/recordings_clean/midi"
-
-    backup_dir(dir1, dir2, filetype="mid")

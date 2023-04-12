@@ -43,6 +43,9 @@ def extract_and_concat(session: Session,
     if not session.video.file_list:
         raise MissingFilesError("Video files expected in subsession, but "
                                 "found none")
+    elif not audio and not video:
+        raise AttributeError("Either audio or video should be true when "
+                             "running extract_and_concat.")
 
     outputs = []
     if audio:

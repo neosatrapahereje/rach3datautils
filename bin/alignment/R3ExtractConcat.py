@@ -11,11 +11,12 @@ parser = argparse.ArgumentParser(
     prog="Extract audio/video and concatenate",
     description="Take a folder containing one or more complete sessions "
                 "and combine all the sub-videos and audios into 1 session "
-                "video or audio."
+                "video or audio per session."
 )
 parser.add_argument(
     "-d", "--root_directory",
     action='store',
+    required=True,
     help='The root directory where the dataset is '
          'located. All folders and subfolders in this '
          'directory will be searched.'
@@ -30,6 +31,7 @@ parser.add_argument(
     help='Where to output processed files. If the '
          'directory does not exist, a new one will be '
          'created.',
+    required=True,
     default='./concat/'
 )
 parser.add_argument(

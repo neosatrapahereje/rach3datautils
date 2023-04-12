@@ -3,7 +3,7 @@
 import numpy as np
 from typing import Dict
 import re
-from rach3datautils.extra.backup_files import get_video_hash
+from rach3datautils.extra.hashing import get_video_hash
 from rach3datautils.types import PathLike
 
 

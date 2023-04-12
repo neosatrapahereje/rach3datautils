@@ -3,7 +3,7 @@ from rach3datautils.utils.dataset import DatasetUtils
 from rach3datautils.alignment.sync import load_and_sync, Sync
 from rach3datautils.types import timestamps
 from pathlib import Path
-from typing import List
+from typing import List, Tuple
 from tqdm import tqdm
 import csv
 
@@ -122,11 +122,11 @@ sync_args = {
     "stride": args.stride,
     "search_period": args.search_period
 }
-timestamps_list: List[timestamps] = []
+timestamps_list: List[Tuple[str, timestamps]] = []
 for i in tqdm(sessions):
     timestamps_list.append(
         (
-            str(i),
+            str(i.id),
             load_and_sync(
                 performance=i.performance,
                 flac=i.flac.file,

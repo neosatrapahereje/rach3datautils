@@ -47,7 +47,11 @@ subsessions = dataset.get_sessions(filetype=[".mid", ".mp4", ".flac",
 
 for i in tqdm(subsessions):
     split_video_flac_mid(
-        subsession=i,
+        audio=i.audio.file,
+        flac=i.flac.file,
+        midi=i.midi.file,
+        video=i.video.file,
+        performance=i.performance,
         overwrite=args.overwrite,
         output_dir=output_dir
     )

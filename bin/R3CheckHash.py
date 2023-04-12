@@ -1,4 +1,4 @@
-from rach3datautils.extra.backup_files import check_hashes
+from rach3datautils.extra.hashing import check_hashes
 import argparse as ap
 
 
@@ -11,14 +11,16 @@ if __name__ == "__main__":
     parser.add_argument(
         "-d",  "--video-directory",
         action="store",
+        required=True,
+        type=str,
         nargs="*"
     )
     parser.add_argument(
         "-hf", "--hash-file",
-        action="store"
+        action="store",
+        type=str,
+        required=True
     )
     args = parser.parse_args()
 
     check_hashes(hash_file=args.hash_file, video_dirs=args.video_directory)
-
-
