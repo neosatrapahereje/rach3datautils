@@ -6,7 +6,6 @@ from rach3datautils.utils.multimedia import MultimediaTools
 from typing import Union, Optional, List, Tuple, Literal
 from partitura.performance import Performance
 
-
 full_session_id = Tuple[str, str]  # (date, subsession_no)
 # A file can either be composed of many parts, "multi", or just be one part
 # "single"
@@ -327,3 +326,32 @@ class Session:
         None
         """
         self.audio.file_list.sort(key=PathUtils.get_fileno_p)
+
+    def check_properties(self, properties: Union[List[str], str]) -> bool:
+        """
+        Check if a property exists in the object. Based on a string or
+        multiple strings.
+
+        Parameters
+        ----------
+        properties : Union[List[str], str]
+            The properties to be checked.
+
+        Returns
+        -------
+        bool
+            True if property exists, False otherwise.
+        """
+        for i in properties:
+            attrs = i.split(".")
+            obj = self
+            try:
+                for j in attrs:
+                    obj = getattr(obj, j)
+
+                if obj is None:
+                    return False
+
+            except AttributeError:
+                return False
+        return True

@@ -132,3 +132,24 @@ class DatasetUtils:
                 continue
 
         return list(sorted_files.values())
+
+    @staticmethod
+    def remove_noncomplete(subsession_list: List[Session],
+                           required: Union[List[str], str]):
+        """
+        Return a list of subsessions with only subsessions that have the
+        required attributes.
+
+        Parameters
+        ----------
+        subsession_list : List[Session]
+        required : Union[List[str], str]
+            required attributes, e.g. performance, midi.file.
+
+        Returns
+        -------
+        new_subsession_list
+            a new list that contains only subsessions with the required
+            attributes.
+        """
+        return [i for i in subsession_list if i.check_properties(required)]

@@ -14,5 +14,6 @@ pip install -r requirements.txt
 ```
 pip install -e .[EXTRA]
 ```
- - Put ```RACH3DATAUTILS_DEBUG=True``` in a .env file in project root 
-   to see additional debug info when running.
+ - Put ```RACH3DATAUTILS_LOGLEVEL=DEBUG``` in a .env file in project root 
+   to see additional debug info when running. You can also set this to any 
+   other valid log level.

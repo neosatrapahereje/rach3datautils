@@ -1,13 +1,20 @@
+import logging
+
 import partitura as pt
 from partitura.performance import Performance
 from pathlib import Path
 from typing import Optional, Union, List, Tuple
-from rach3datautils.exceptions import MissingFilesError
+from rach3datautils.exceptions import MissingFilesError, SyncError
 from rach3datautils.utils.multimedia import MultimediaTools
 from rach3datautils.alignment.sync import load_and_sync
 from rach3datautils.types import timestamps, note_sections, PathLike
+from rach3datautils.config import LOGLEVEL
 import numpy as np
 import numpy.typing as npt
+
+
+logger = logging.getLogger(__name__)
+logger.setLevel(LOGLEVEL)
 
 
 def split_video_flac_mid(
@@ -198,16 +205,22 @@ class Splits:
                        note_array['onset_sec'][prev_note]
             end_time = prev_time + end_note
 
-            times = load_and_sync(
-                flac=flac,
-                audio=audio,
-                performance=performance,
-                sync_args={"notes_index": (i[0], i[1]),
-                           "search_period": 15,
-                           "start_end_times": (start_time, end_time),
-                           "window_size": 1000},
-                track_args={"hop_size": int(np.round(44100 * 0.005))}
-            )
+            try:
+                times = load_and_sync(
+                    flac=flac,
+                    audio=audio,
+                    performance=performance,
+                    sync_args={"notes_index": (i[0], i[1]),
+                               "search_period": 15,
+                               "start_end_times": (start_time, end_time),
+                               "window_size": 1000},
+                    track_args={"hop_size": int(np.round(44100 * 0.005))}
+                )
+            except SyncError:
+                logger.error(f"Encountered errors while processing the "
+                             f"following files: {flac}, {audio}.")
+                continue
+
             section_times.append(times)
             prev_time = times[1]
             prev_note = i[1]

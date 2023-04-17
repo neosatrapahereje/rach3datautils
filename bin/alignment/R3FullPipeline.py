@@ -57,6 +57,10 @@ with tempfile.TemporaryDirectory(dir="../") as tempdir:
 
     dataset = DatasetUtils(root_path=args.root_dir + [tempdir])
     sessions = dataset.get_sessions([".mp4", ".mid", ".flac", ".aac"])
+    sessions = dataset.remove_noncomplete(
+        sessions,
+        required=["video.file_list", "midi.file", "flac.file"]
+    )
 
     for subsession in tqdm(sessions, desc="running full pipeline"):
         if subsession.audio.file is None or subsession.video.file is None:

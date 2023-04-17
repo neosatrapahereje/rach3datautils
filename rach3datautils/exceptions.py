@@ -13,3 +13,11 @@ class MissingFilesError(Exception):
     this means the file is missing from the subsection.
     """
     ...
+
+
+class SyncError(Exception):
+    """
+    Raised when something goes wrong with the sync function. Most often when
+    the requested section to be searched is outside the file.
+    """
+    ...

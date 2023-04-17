@@ -7,6 +7,7 @@ from typing import Tuple, Optional, TypedDict
 from rach3datautils.types import PathLike
 import scipy.spatial as sp
 from partitura.performance import Performance
+from rach3datautils.exceptions import SyncError
 
 
 # (session ID, first note, last note)
@@ -264,8 +265,13 @@ class Sync:
         Returns
         -------
         time_section : Tuple[float, float]
-            first entry being first note time and second entry being second
-            note time.
+            tuple with first entry being first note time and second entry being
+            second note time.
+
+        Raises
+        ------
+        SyncError
+            If something prevents the algorithm from working.
         """
         if window_size is not None:
             self.window_size = window_size
@@ -287,31 +293,40 @@ class Sync:
 
         # The first window is generated from the first note on to avoid index
         # errors with the start of the file
-        _, synced_first_note_window = synced_track.calc_log_spect_section(
-            start=first_note_time,
-            end=first_note_time + window_time
-        )
-        # The last window is generated up to the last note
-        # This is in order to avoid index errors when hitting the end of the
-        # file
-        _, synced_last_note_window = synced_track.calc_log_spect_section(
-            start=last_note_time - window_time,
-            end=last_note_time
-        )
-
-        sect_border_first, nonsynced_first_note_windows = \
-            self.windows_within_section(
-                track=nonsynced_track,
-                section_size=search_period,
-                section_midpoint=start_end_times[0]
+        try:
+            _, synced_first_note_window = synced_track.calc_log_spect_section(
+                start=first_note_time,
+                end=first_note_time + window_time
             )
-
-        sect_border_last, nonsynced_last_note_windows = \
-            self.windows_within_section(
-                track=nonsynced_track,
-                section_midpoint=start_end_times[1],
-                section_size=search_period
+            # The last window is generated up to the last note This is in
+            # order to avoid index errors when hitting the end of the file
+            _, synced_last_note_window = synced_track.calc_log_spect_section(
+                start=last_note_time - window_time,
+                end=last_note_time
             )
+        except AttributeError as f:
+            raise SyncError("Unable to generate synced track spectrogram. "
+                            "Something may be wrong with the provided "
+                            "note array.") from f
+
+        try:
+            sect_border_first, nonsynced_first_note_windows = \
+                self.windows_within_section(
+                    track=nonsynced_track,
+                    section_size=search_period,
+                    section_midpoint=start_end_times[0]
+                )
+
+            sect_border_last, nonsynced_last_note_windows = \
+                self.windows_within_section(
+                    track=nonsynced_track,
+                    section_midpoint=start_end_times[1],
+                    section_size=search_period
+                )
+        except AttributeError as f:
+            raise SyncError("Unable to generate non-synced track spectrogram. "
+                            "The provided start_end_times are most likely "
+                            "wrong.") from f
 
         first_distances = self.distance_func(nonsynced_first_note_windows,
                                              synced_first_note_window)

@@ -1,4 +1,7 @@
+import logging
 import os
+from typing import Literal, Union
+
 
 try:
     from dotenv import load_dotenv
@@ -6,9 +9,8 @@ try:
 except ModuleNotFoundError:
     pass
 
-DEBUG = os.getenv("RACH3DATAUTILS_DEBUG", "False")
+LOGLEVELS = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+LOGLEVEL: Union[LOGLEVELS, str] = os.getenv("RACH3DATAUTILS_LOGLEVEL", "INFO")
 
-if DEBUG == "False":
-    DEBUG = False
-elif DEBUG == "True":
-    DEBUG = True
+logging.basicConfig(level=LOGLEVEL)
+logger = logging.getLogger("rach3datautils")

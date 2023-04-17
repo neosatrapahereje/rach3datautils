@@ -10,13 +10,17 @@ from partitura.utils.music import slice_ppart_by_time
 from partitura.performance import PerformedPart
 from partitura.performance import Performance
 from rach3datautils.types import PathLike, timestamps
-from rach3datautils.config import DEBUG
+from rach3datautils.config import LOGLEVEL
 
 
-if DEBUG:
-    LOGLEVEL = "debug"
-else:
-    LOGLEVEL = "quiet"
+FFMPEG_LOGLEVELS = {
+    "DEBUG": "debug",
+    "INFO": "info",
+    "WARNING": "warning",
+    "ERROR": "error",
+    "CRITICAL": "panic"
+}
+FFMPEG_LOGLEVEL = FFMPEG_LOGLEVELS[LOGLEVEL]
 
 
 class MultimediaTools:
@@ -56,7 +60,7 @@ class MultimediaTools:
 
         video = ffmpeg.input(filepath)
         out = ffmpeg.output(video.audio, filename=output, c="copy",
-                            loglevel=LOGLEVEL)
+                            loglevel=FFMPEG_LOGLEVEL)
         out = ffmpeg.overwrite_output(out)
         out.run()
         return output
@@ -119,12 +123,12 @@ class MultimediaTools:
         if reencode:
             out = ffmpeg.output(concatenated,
                                 filename=output,
-                                loglevel=LOGLEVEL)
+                                loglevel=FFMPEG_LOGLEVEL)
         else:
             out = ffmpeg.output(concatenated,
                                 filename=output,
                                 c="copy",
-                                loglevel=LOGLEVEL)
+                                loglevel=FFMPEG_LOGLEVEL)
         out = ffmpeg.overwrite_output(out)
         out.run()
 
@@ -266,7 +270,7 @@ class MultimediaTools:
         input_file = ffmpeg.input(audio_path)
         audio = input_file.audio
         trimmed = audio.filter("atrim", start=split_start, end=split_end)
-        out = ffmpeg.output(trimmed, filename=output, loglevel=LOGLEVEL)
+        out = ffmpeg.output(trimmed, filename=output, loglevel=FFMPEG_LOGLEVEL)
         out = ffmpeg.overwrite_output(out)
         out.run()
 
@@ -358,7 +362,7 @@ class MultimediaTools:
         ).filter(
             "areverse"
         )
-        out = ffmpeg.output(trimmed, filename=output, loglevel=LOGLEVEL)
+        out = ffmpeg.output(trimmed, filename=output, loglevel=FFMPEG_LOGLEVEL)
         out = ffmpeg.overwrite_output(out)
         out.run()
 
@@ -395,10 +399,10 @@ class MultimediaTools:
         ffmpeg_in = ffmpeg.input(file, ss=start)
         if reencode:
             out = ffmpeg_in.output(filename=output_file, to=end-start,
-                                   loglevel=LOGLEVEL)
+                                   loglevel=FFMPEG_LOGLEVEL)
         else:
             out = ffmpeg_in.output(filename=output_file, to=end-start,
-                                   c="copy", loglevel=LOGLEVEL)
+                                   c="copy", loglevel=FFMPEG_LOGLEVEL)
 
         out = ffmpeg.overwrite_output(out)
         out.run()
