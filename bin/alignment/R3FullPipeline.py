@@ -21,7 +21,8 @@ parser.add_argument(
     "-d", "--root_dir",
     action='store',
     help='The root directory where the dataset is located. All folders '
-         'and subfolders in this directory will be searched.'
+         'and subfolders in this directory will be searched.',
+    nargs="*"
 )
 parser.add_argument(
     "-w", "--overwrite",
@@ -54,7 +55,7 @@ if not output_dir.exists():
 with tempfile.TemporaryDirectory(dir="../") as tempdir:
     tempdir = Path(tempdir)
 
-    dataset = DatasetUtils(root_path=[args.root_dir, tempdir])
+    dataset = DatasetUtils(root_path=args.root_dir + [tempdir])
     sessions = dataset.get_sessions([".mp4", ".mid", ".flac", ".aac"])
 
     for subsession in tqdm(sessions, desc="running full pipeline"):

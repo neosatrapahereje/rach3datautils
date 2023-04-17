@@ -99,9 +99,6 @@ class SessionIdentity:
         """
         date, subsession_no = self.get_file_identity(file)
 
-        if date is None or subsession_no is None:
-            raise IdentityError("File could not be identified.")
-
         self.date = date
         self.subsession_no = subsession_no
         self.full_id = (self.date, self.subsession_no)

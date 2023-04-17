@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import Union, Literal, Tuple, get_args, List
 import re
+from rach3datautils.exceptions import IdentityError
 
 
 filetypes = Literal["midi", "full_midi", "flac", "full_flac", "mp4",
@@ -17,7 +18,7 @@ class PathUtils:
     Contains various functions that help working with paths within the dataset.
     """
 
-    def get_type(self, path: Path) -> filetypes:
+    def get_type(self, path: Path) -> Union[filetypes, None]:
         """
         Get the type of the given file.
 
@@ -38,6 +39,11 @@ class PathUtils:
 
         The current way this works is fragile and overly verbose.
         """
+        if self.is_warmup(path):
+            return
+        elif path.stem.split("_")[0] != "rach3":
+            return
+
         if path.suffix == ".mid":
             if self.is_valid_midi(path):
                 return "full_midi"
@@ -152,8 +158,8 @@ class PathUtils:
         date_pat = re.compile(r"([0-9]{4})-([0-9]{2})-([0-9]{2})")
         search = date_pat.search(file.name)
         if search is None:
-            raise AttributeError("Date could not be identified from the given "
-                                 "file.")
+            raise IdentityError("Date could not be identified from the given "
+                                "file.")
         date = search.group()
         return date
 

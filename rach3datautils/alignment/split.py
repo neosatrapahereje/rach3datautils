@@ -185,16 +185,18 @@ class Splits:
             track_args={"hop_size": int(np.round(44100 * 0.1))}
         )
         note_array = performance.note_array()
-        first_time = note_array['onset_sec'][0]
 
         section_times: List[timestamps] = []
+        prev_time = first_last_times[0]
+        prev_note = 0
         for i in sections:
-            start_note = note_array['onset_sec'][i[0]] - first_time
-            start_time = first_last_times[0] + start_note
+            start_note = note_array['onset_sec'][i[0]] - \
+                         note_array['onset_sec'][prev_note]
+            start_time = prev_time + start_note
 
-            end_note = (note_array['onset_sec'][i[1]] +
-                        note_array['duration_sec'][i[1]]) - first_time
-            end_time = first_last_times[0] + end_note
+            end_note = note_array['onset_sec'][i[1]] - \
+                       note_array['onset_sec'][prev_note]
+            end_time = prev_time + end_note
 
             times = load_and_sync(
                 flac=flac,
@@ -207,6 +209,8 @@ class Splits:
                 track_args={"hop_size": int(np.round(44100 * 0.005))}
             )
             section_times.append(times)
+            prev_time = times[1]
+            prev_note = i[1]
 
         return section_times
 

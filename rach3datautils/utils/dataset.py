@@ -4,6 +4,7 @@ from typing import Union, Literal, List, Optional
 from rach3datautils.utils.session import Session, SessionIdentity
 from rach3datautils.utils.path import PathUtils, suffixes_list, suffixes
 from rach3datautils.types import PathLike
+from rach3datautils.exceptions import IdentityError
 
 
 valid_input_filetypes = Union[list[suffixes], suffixes, Literal["*"]]
@@ -122,9 +123,12 @@ class DatasetUtils:
         sorted_files = defaultdict(Session)
 
         for i in files:
-            session_id = SessionIdentity()
-            session_id.set(i)
+            try:
+                session_id = SessionIdentity()
+                session_id.set(i)
 
-            sorted_files[str(session_id)].set_unknown(i)
+                sorted_files[str(session_id)].set_unknown(i)
+            except IdentityError:
+                continue
 
         return list(sorted_files.values())
