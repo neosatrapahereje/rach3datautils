@@ -1,0 +1,488 @@
+import warnings
+from typing import Optional, Union, overload, Literal, List
+import shutil
+from pathlib import Path
+import os
+import tempfile
+import ffmpeg
+import partitura as pt
+from partitura.utils.music import slice_ppart_by_time
+from partitura.performance import PerformedPart
+from partitura.performance import Performance
+from rach3datautils.types import PathLike, timestamps
+from rach3datautils.config import LOGLEVEL
+
+
+FFMPEG_LOGLEVELS = {
+    "DEBUG": "debug",
+    "INFO": "info",
+    "WARNING": "warning",
+    "ERROR": "error",
+    "CRITICAL": "panic"
+}
+FFMPEG_LOGLEVEL = FFMPEG_LOGLEVELS[LOGLEVEL]
+
+
+class MultimediaTools:
+    """
+    Contains useful ffmpeg pipelines for working with audio and video, as well
+    as other utility functions for working with midi files.
+    """
+    @staticmethod
+    def extract_audio(filepath: Path, output: Path = None,
+                      overwrite: bool = False) -> Path:
+        """
+        Extract audio from a video file. Returns the filepath of the new audio
+        file.
+        If no output is specified outputs the file in the same folder
+        as the original video.
+
+        Parameters
+        ----------
+        filepath : Path
+        output : Path
+        overwrite : bool
+
+        Returns
+        -------
+        new_file : Path
+        """
+
+        if output is None:
+            output = Path(os.path.join("..", "audio_files",
+                                       filepath.stem + "_audio.mp3"))
+        elif not output.suffix == ".aac":
+            raise AttributeError("Output must either be None or a valid path "
+                                 "to a .acc file")
+
+        if output.is_file() and not overwrite:
+            return output
+
+        video = ffmpeg.input(filepath)
+        out = ffmpeg.output(video.audio, filename=output, c="copy",
+                            loglevel=FFMPEG_LOGLEVEL)
+        out = ffmpeg.overwrite_output(out)
+        out.run()
+        return output
+
+    @staticmethod
+    def concat(files: List[Optional[Path]],
+               output: Path,
+               overwrite: Optional[bool] = None,
+               reencode: Optional[bool] = None) -> Union[Path, None]:
+        """
+        Takes a list of audio or video files and concatenates them into one
+        file. They will be concatenated in the order present within the list.
+
+        If only one file is given, it will simply be copied to the output
+        location.
+
+        Parameters
+        ----------
+        files : List[Optional[Path]]
+        output : Path
+        overwrite : bool, optional
+            default is False
+        reencode : bool, optional
+            default is False
+
+        Returns
+        -------
+        file_path : Path or None
+            None if no files were given
+        """
+        if overwrite is None:
+            overwrite = False
+        if reencode is None:
+            reencode = False
+        if not files:
+            return
+        if len(files) == 1:
+            shutil.copy(files[0], output)
+            return output
+
+        if output.suffix not in [".aac", ".mp4", ".flac"]:
+            raise AttributeError("Output must be a valid path to a .acc or "
+                                 ".mp4 file")
+
+        # Only rewrite files if its explicitly stated
+        if output.is_file() and not overwrite:
+            return output
+
+        streams = [str(i) for i in files if i.suffix in [".mp4", ".aac"]]
+
+        tmp = tempfile.NamedTemporaryFile(mode="w",
+                                          prefix="concat_file",
+                                          suffix=".txt")
+
+        with open(tmp.name, "w") as f:
+            [f.write(f"file '{stream}'\n") for stream in streams]
+
+        # This is a bit of a hack, there's probably a better way to do it.
+        concatenated = ffmpeg.input(Path(f.name), f='concat', safe=0)
+        if reencode:
+            out = ffmpeg.output(concatenated,
+                                filename=output,
+                                loglevel=FFMPEG_LOGLEVEL)
+        else:
+            out = ffmpeg.output(concatenated,
+                                filename=output,
+                                c="copy",
+                                loglevel=FFMPEG_LOGLEVEL)
+        out = ffmpeg.overwrite_output(out)
+        out.run()
+
+        tmp.close()
+        return output
+
+    @staticmethod
+    @overload
+    def find_breaks(
+            performance: Performance, length: float,
+            return_notes: Literal[True]) -> list[tuple[int, int]]:
+        ...
+
+    @staticmethod
+    @overload
+    def find_breaks(
+            performance: Performance, length: float,
+            return_notes: Optional[Literal[False]] = None) -> \
+            list[tuple[float, float]]:
+        ...
+
+    @staticmethod
+    def find_breaks(performance: Performance,
+                    length: float,
+                    return_notes: Optional[bool] = None) -> List[
+            Union[tuple[float, float], tuple[int, int]]]:
+        """
+        Take a midi performance partitura object and find spots where nothing
+        was played for the period of time specified.
+
+        returns a list of tuples, where a tuple contains the start and end time
+        of the break section. If return_notes is True, then it returns the
+        note numbers instead of the timestamps.
+
+        Parameters
+        ----------
+        return_notes : bool
+            whether to return the note indexes instead of times
+        performance : Performance
+            the midi performance object
+        length : float
+            how many seconds nothing was played
+
+        Returns
+        -------
+        breaks_list : List[Union[Tuple[float, float], Tuple[int, int]]]
+            each tuple contains start and end times/notes for the sections
+        """
+        if return_notes is None:
+            return_notes = False
+
+        note_array = performance.note_array()
+        if len(note_array.shape) != 1:
+            raise AttributeError("Midi files with more than one track are "
+                                 "unsupported.")
+
+        breaks = []
+        prev_time = note_array[0][0]
+        prev_note = 0
+        for no, i in enumerate(note_array):
+            time = i[0]
+            if time - prev_time > length:
+                if return_notes:
+                    breaks.append((prev_note, no))
+                else:
+                    breaks.append((prev_time, time))
+            prev_time = time
+            prev_note = no
+
+        return breaks
+
+    @staticmethod
+    def get_first_time(performance: Performance) -> float:
+        """
+        Get the time of the first note in a performance.
+
+        Parameters
+        ----------
+        performance : Performance
+
+        Returns
+        -------
+        first_time : float
+        """
+        note_array = performance.note_array()
+        return note_array[0][0]
+
+    @staticmethod
+    def get_last_time(performance: Performance) -> float:
+        """
+        Get the timestamp when the last note was played.
+
+        Parameters
+        ----------
+        performance : Performance
+
+        Returns
+        -------
+        last_time : float
+        """
+        note_array = performance.note_array()
+        return note_array[-1][0]
+
+    @staticmethod
+    def split_audio(audio_path: PathLike,
+                    split_start: float,
+                    split_end: float,
+                    output: Path,
+                    overwrite: Optional[bool] = None) -> PathLike:
+        """
+        Extract a section of an audio file given start and end points.
+
+        Parameters
+        ----------
+        output : Path
+            path where to output file
+        split_end : float
+            end of the split in seconds
+        audio_path : PathLike
+            path to audio file as a Path or string
+        split_start : float
+            the place in seconds at which to split audio
+        overwrite : bool, optional
+            bool, whether to overwrite already existing files
+
+        Returns
+        -------
+        audio_file : PathLike
+            path of new audio file, the same as `output`
+        """
+        if overwrite is None:
+            overwrite = False
+
+        if not output.suffix:
+            raise AttributeError("Output must be a path to a file")
+        elif output.is_file() and not overwrite:
+            return output
+
+        input_file = ffmpeg.input(audio_path)
+        audio = input_file.audio
+        trimmed = audio.filter("atrim", start=split_start, end=split_end)
+        out = ffmpeg.output(trimmed, filename=output, loglevel=FFMPEG_LOGLEVEL)
+        out = ffmpeg.overwrite_output(out)
+        out.run()
+
+        return output
+
+    def get_len(self, audio_path: PathLike) -> float:
+        """
+        Get the length in seconds of a media file.
+
+        Parameters
+        ----------
+        audio_path : path to audio file
+
+        Returns
+        -------
+        length : float
+        """
+        metadata = self.ff_probe(audio_path)
+        duration = float(metadata["format"]["duration"])
+        return duration
+
+    @staticmethod
+    def ff_probe(filepath: PathLike):
+        return ffmpeg.probe(filepath)
+
+    @staticmethod
+    def delete_files(files: List[Path]) -> None:
+        """
+        Delete a list of files.
+
+        Parameters
+        ----------
+        files : List[Path]
+
+        Returns
+        -------
+        None
+        """
+        [os.remove(i) for i in files]
+
+    @staticmethod
+    def trim_silence(file: Path,
+                     output: Path,
+                     overwrite: Optional[bool] = None,
+                     threshold: Optional[int] = None) -> None:
+        """
+        Trim silence at start and end of a given file.
+
+        Parameters
+        ----------
+        file : Path
+            path to the file to trim
+        output : Path
+            path to output file
+        overwrite : bool, optional
+            whether to overwrite an existing file, default is False
+        threshold : int, optional
+            at what loudness level in decibels to detect sound, default is -20
+
+        Returns
+        -------
+        None
+        """
+        if overwrite is None:
+            overwrite = False
+        if threshold is None:
+            threshold = -20
+
+        if not output.suffix:
+            raise AttributeError("Output must be a path to a file")
+
+        if output.is_file() and not overwrite:
+            return
+
+        input_file = ffmpeg.input(file)
+        audio = input_file.audio
+
+        trimmed = audio.filter(
+            "silenceremove",
+            start_periods=1,
+            start_threshold=f"{threshold}dB"
+        ).filter(
+            "areverse"
+        ).filter(
+            "silenceremove",
+            start_periods=1,
+            start_threshold=f"{threshold}dB"
+
+        ).filter(
+            "areverse"
+        )
+        out = ffmpeg.output(trimmed, filename=output, loglevel=FFMPEG_LOGLEVEL)
+        out = ffmpeg.overwrite_output(out)
+        out.run()
+
+    @staticmethod
+    def extract_section(file: PathLike,
+                        output_file: PathLike,
+                        start: float,
+                        end: float,
+                        reencode: Optional[bool] = None):
+        """
+        Extract a section from a video given start and end points. Will
+        overwrite files.
+
+        Parameters
+        ----------
+        reencode : bool, optional
+            whether to reencode the file or not
+        output_file : PathLike
+            Where to output new section
+        file : PathLike
+            the path to the video
+        start : float
+            the timestamp where to start the section from
+        end : float
+            the timestamp for where to end the section
+
+        Returns
+        -------
+        None
+        """
+        if reencode is None:
+            reencode = False
+
+        ffmpeg_in = ffmpeg.input(file, ss=start)
+        if reencode:
+            out = ffmpeg_in.output(filename=output_file, to=end-start,
+                                   loglevel=FFMPEG_LOGLEVEL)
+        else:
+            out = ffmpeg_in.output(filename=output_file, to=end-start,
+                                   c="copy", loglevel=FFMPEG_LOGLEVEL)
+
+        out = ffmpeg.overwrite_output(out)
+        out.run()
+
+    @staticmethod
+    def get_decoded_duration(file: PathLike) -> float:
+        """
+        Get the duration of a file by decoding its audio. This will yield more
+        accurate results than get_len.
+
+        Parameters
+        ----------
+        file : PathLike
+
+        Returns
+        -------
+        file_len : float
+            in seconds
+        """
+        ffmpeg_in = ffmpeg.input(file).audio
+        out = ffmpeg_in.output(filename="-", f='null')
+        ffmpeg_return = out.run(capture_stderr=True)[1]
+
+        # Parsing the output to get the time
+        encode_out = ffmpeg_return.split(b"\n")[46].split(b"\r")
+        encode_sub = encode_out[-1].split(b" ")
+        encode_sub.reverse()
+        time = []
+        for i in encode_sub:
+            if b"time=" in i:
+                time = str(i)[7:-1].split(":")
+                break
+
+        time = sum([j * float(i) for i, j in zip(time, [60*60, 60, 1])])
+
+        return time
+
+    @staticmethod
+    def load_performance(file: PathLike) -> pt.performance.Performance:
+        """
+        Load a midi performance as a partitura performance object.
+
+        Parameters
+        ----------
+        file : PathLike
+
+        Returns
+        -------
+        performance : partitura.performance.Performance
+        """
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            return pt.load_performance_midi(file)
+
+    @staticmethod
+    def split_performance(performed_part: PerformedPart,
+                          split_points: List[timestamps]) -> \
+            List[PerformedPart]:
+        """
+        Take a performance and section timestamps and return a list of
+        PerformedPart objects based on the timestamps.
+
+        Parameters
+        ----------
+        performed_part : PerformedPart
+        split_points : List[timestamps]
+            timestamps showing start and end of sections
+
+        Returns
+        -------
+        pp_list : List[PerformedPart]
+            a list of sub-performances
+        """
+        subperformances: List[PerformedPart] = []
+        for i in split_points:
+            subperformances.append(
+                slice_ppart_by_time(
+                    ppart=performed_part,
+                    start_time=i[0],
+                    end_time=i[1]
+                )
+            )
+        return subperformances

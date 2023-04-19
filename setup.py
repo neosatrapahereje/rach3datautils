@@ -3,7 +3,7 @@
 
 import io
 import os
-from setuptools import find_packages, setup, Command
+from setuptools import setup
 
 # Package meta-data.
 NAME = "rach3datautils"
@@ -12,14 +12,17 @@ KEYWORDS = ""
 URL = "https://github.com/neosatrapahereje/rach3datautils"
 EMAIL = "carloscancinochacon@gmail.com"
 AUTHOR = "Carlos Cancino-Chacón"
-REQUIRES_PYTHON = ">=3.6"
+REQUIRES_PYTHON = ">=3.9"
 VERSION = "0.0.1"
 
 # Required packages
-REQUIRED = []
+REQUIRED = ["partitura", "ffmpeg-python", "numpy", "madmom", "scipy"]
 
 # Optional
-EXTRAS = {}
+extra = ["filedate", "tqdm", "python-dotenv"]
+EXTRAS = {
+    "EXTRA": extra,
+}
 
 SCRIPTS = ["bin/R3GetVideoHash"]
 
