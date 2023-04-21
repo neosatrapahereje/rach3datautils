@@ -1,17 +1,17 @@
 import logging
-
-import partitura as pt
-from partitura.performance import Performance
 from pathlib import Path
 from typing import Optional, Union, List, Tuple
-from rach3datautils.exceptions import MissingFilesError, SyncError
-from rach3datautils.utils.multimedia import MultimediaTools
-from rach3datautils.alignment.sync import load_and_sync
-from rach3datautils.types import timestamps, note_sections, PathLike
-from rach3datautils.config import LOGLEVEL
+
 import numpy as np
 import numpy.typing as npt
+import partitura as pt
+from partitura.performance import Performance
 
+from rach3datautils.alignment.sync import load_and_sync
+from rach3datautils.config import LOGLEVEL
+from rach3datautils.exceptions import MissingFilesError, SyncError
+from rach3datautils.types import timestamps, note_sections, PathLike
+from rach3datautils.utils.multimedia import MultimediaTools
 
 logger = logging.getLogger(__name__)
 logger.setLevel(LOGLEVEL)

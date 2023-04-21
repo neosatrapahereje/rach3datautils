@@ -1,9 +1,10 @@
 import tempfile
+from pathlib import Path
 from typing import Optional, List
+
+from rach3datautils.exceptions import MissingFilesError
 from rach3datautils.utils.multimedia import MultimediaTools
 from rach3datautils.utils.session import Session
-from rach3datautils.exceptions import MissingFilesError
-from pathlib import Path
 
 
 def extract_and_concat(session: Session,

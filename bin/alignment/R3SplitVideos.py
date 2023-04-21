@@ -1,10 +1,11 @@
 import argparse as ap
-from pathlib import Path
-from tqdm import tqdm
 import os
+from pathlib import Path
+
+from tqdm import tqdm
+
 from rach3datautils.alignment.split import split_video_flac_mid
 from rach3datautils.utils.dataset import DatasetUtils
-
 
 parser = ap.ArgumentParser(
     prog="Midi Based Video and Audio Splitter",

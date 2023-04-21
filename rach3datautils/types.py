@@ -1,9 +1,8 @@
 """
 Custom types used throughout the whole module
 """
-from typing import Tuple, Union
 import os
-
+from typing import Tuple, Union
 
 timestamps = Tuple[float, float]
 note_sections = Tuple[int, int]

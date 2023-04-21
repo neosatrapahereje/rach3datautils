@@ -1,17 +1,18 @@
-import warnings
-from typing import Optional, Union, overload, Literal, List
-import shutil
-from pathlib import Path
 import os
+import shutil
 import tempfile
+import warnings
+from pathlib import Path
+from typing import Optional, Union, overload, Literal, List
+
 import ffmpeg
 import partitura as pt
-from partitura.utils.music import slice_ppart_by_time
-from partitura.performance import PerformedPart
 from partitura.performance import Performance
-from rach3datautils.types import PathLike, timestamps
-from rach3datautils.config import LOGLEVEL
+from partitura.performance import PerformedPart
+from partitura.utils.music import slice_ppart_by_time
 
+from rach3datautils.config import LOGLEVEL
+from rach3datautils.types import PathLike, timestamps
 
 FFMPEG_LOGLEVELS = {
     "DEBUG": "debug",

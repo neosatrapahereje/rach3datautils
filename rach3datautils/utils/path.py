@@ -1,8 +1,8 @@
+import re
 from pathlib import Path
 from typing import Union, Literal, Tuple, get_args, List
-import re
-from rach3datautils.exceptions import IdentityError
 
+from rach3datautils.exceptions import IdentityError
 
 filetypes = Literal["midi", "full_midi", "flac", "full_flac", "mp4",
                     "full_video", "video", "aac", "full_audio", "audio",

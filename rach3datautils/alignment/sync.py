@@ -1,14 +1,15 @@
+from typing import Tuple, Optional, TypedDict
+
 import madmom
-from madmom.audio.signal import FramedSignal
-from rach3datautils.exceptions import MissingFilesError
 import numpy as np
 import numpy.typing as npt
-from typing import Tuple, Optional, TypedDict
-from rach3datautils.types import PathLike
 import scipy.spatial as sp
+from madmom.audio.signal import FramedSignal
 from partitura.performance import Performance
-from rach3datautils.exceptions import SyncError
 
+from rach3datautils.exceptions import MissingFilesError
+from rach3datautils.exceptions import SyncError
+from rach3datautils.types import PathLike
 
 # (session ID, first note, last note)
 time_section = Tuple[float, float]
