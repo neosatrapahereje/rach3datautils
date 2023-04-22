@@ -3,9 +3,11 @@ import shutil
 import tempfile
 import warnings
 from pathlib import Path
-from typing import Optional, Union, overload, Literal, List
+from typing import Optional, Union, overload, Literal, List, Dict
 
 import ffmpeg
+import numpy as np
+import numpy.typing as npt
 import partitura as pt
 from partitura.performance import Performance
 from partitura.performance import PerformedPart
@@ -487,3 +489,63 @@ class MultimediaTools:
                 )
             )
         return subperformances
+
+    @staticmethod
+    def read_raw_audio(filepath: PathLike,
+                       sample_rate: int,
+                       input_kwargs: Optional[Dict] = None) -> bytes:
+        """
+        Read audio from a file using FFMPEG.
+
+        Parameters
+        ----------
+        filepath : PathLike
+        sample_rate : int
+        input_kwargs : Dict
+            any additional arguments you want to pass
+
+        Returns
+        -------
+        PCM_bytes : bytes
+            the raw PCM audio as bytes
+        """
+        if input_kwargs is None:
+            input_kwargs = {}
+
+        out, _ = (
+            ffmpeg.input(
+                filepath, **input_kwargs
+            ).output(
+                '-', format='s16le', acodec='pcm_s16le', ac=1, ar=sample_rate,
+                loglevel=FFMPEG_LOGLEVEL
+            ).overwrite_output(
+            ).run(
+                capture_stdout=True
+            )
+        )
+        return out
+
+    def load_file_audio(self,
+                        filepath: PathLike,
+                        sample_rate: int) -> npt.NDArray:
+        """
+        Load audio from a file directly into a numpy array using FFMPEG.
+
+        Parameters
+        ----------
+        filepath : PathLike
+        sample_rate : int
+
+        Returns
+        -------
+        PCM_array
+            Numpy array containing the PCM audio data
+        """
+        raw_data = self.read_raw_audio(
+            filepath=filepath,
+            sample_rate=sample_rate
+        )
+        data_s16 = np.frombuffer(raw_data,
+                                 dtype=np.int16)
+        float_data = data_s16 * 0.5**15
+        return float_data

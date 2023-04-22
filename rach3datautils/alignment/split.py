@@ -202,7 +202,7 @@ class Splits:
             start_time = prev_time + start_note
 
             end_note = note_array['onset_sec'][i[1]] - \
-                       note_array['onset_sec'][prev_note]
+                note_array['onset_sec'][prev_note]
             end_time = prev_time + end_note
 
             try:
@@ -423,7 +423,7 @@ def split_va_at_timestamps(splits: List[timestamps],
     """
     for split_no, (start, end) in enumerate(splits):
         output_path_video = output_dir.joinpath(
-            file.stem + f"_split{split_no + 1}" + file.suffix
+            "rach3_" + file.stem + f"_split{split_no + 1}" + file.suffix
         )
 
         if output_path_video.exists() and not overwrite:
