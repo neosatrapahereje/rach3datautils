@@ -3,7 +3,7 @@ from typing import Literal, Union, Optional, Callable
 import numpy as np
 import numpy.typing as npt
 from dtw import dtw
-
+from scipy.spatial.distance import cosine
 from rach3datautils.types import PathLike
 from rach3datautils.utils.track import Track
 
@@ -17,7 +17,8 @@ class Verify:
 
     def check_video_flac(self,
                          video: PathLike,
-                         flac: PathLike) -> Union[verification_issues,
+                         flac: PathLike,
+                         midi: PathLike = None) -> Union[verification_issues,
                                                   Literal[True]]:
         """
         Check whether a video and flac file are sufficiently aligned.
@@ -36,10 +37,12 @@ class Verify:
         video_track = Track(video)
         flac_track = Track(flac)
 
-        if not self.check_len(video_track, flac_track):
+        if not self.check_len(video_track, flac_track, midi):
             return "incorrect_len"
         elif not self.check_spectrogram(video_track, flac_track):
             return "high_DTW"
+        elif not self.check_midi(midi, flac):
+            return "midi_DTW"
         return True
 
     @staticmethod
@@ -68,9 +71,18 @@ class Verify:
             return False
         return True
 
+    def check_tracks(self,
+                     track_1,
+                     track_2):
+        t1_spec = track_1.calc_log_spect_section()
+        t2_spec = track_2.calc_log_spect_section()
+
+        return self.check_spectrogram(spect_1=t1_spec,
+                                      spect_2=t2_spec)
+
     def check_spectrogram(self,
-                          track_1: Track,
-                          track_2: Track,
+                          spect_1,
+                          spect_2,
                           dist_func: Optional[Callable] = None,
                           threshold: Optional[float] = None) -> bool:
         """
@@ -79,8 +91,8 @@ class Verify:
 
         Parameters
         ----------
-        track_1 : PathLike
-        track_2 : PathLike
+        spect_1 : PathLike
+        spect_2 : PathLike
         dist_func : Callable distance function
             takes two numpy arrays and returns a float
         threshold : float
@@ -96,10 +108,7 @@ class Verify:
         if threshold is None:
             threshold = 2
 
-        t1_spec = track_1.calc_log_spect_section()
-        t2_spec = track_2.calc_log_spect_section()
-
-        dist = dist_func(t1_spec[1], t2_spec[1])
+        dist = dist_func(spect_1[1], spect_2[1])
 
         if dist > threshold:
             return False
@@ -120,7 +129,7 @@ class Verify:
         score : float
             how close the two spectrograms are to each other
         """
-        alignment = dtw(spec_1, spec_2)
+        alignment = dtw(spec_1, spec_2, dist_method=cosine)
         norm_dist: float = alignment.normalizedDistance
 
         return norm_dist
