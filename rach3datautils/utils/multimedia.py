@@ -236,6 +236,22 @@ class MultimediaTools:
         return note_array[-1][0]
 
     @staticmethod
+    def get_last_offset(performance: Performance):
+        """
+        Last note in note array + duration of that note
+
+        Parameters
+        ----------
+        performance : Performance
+
+        Returns
+        -------
+        last_offset : float
+        """
+        note_array = performance.note_array()
+        return note_array["onset_sec"][-1] + note_array["duration_sec"][-1]
+
+    @staticmethod
     def split_audio(audio_path: PathLike,
                     split_start: float,
                     split_end: float,

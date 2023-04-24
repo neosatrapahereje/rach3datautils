@@ -29,9 +29,10 @@ parser.add_argument(
 args = parser.parse_args()
 
 dataset = DatasetUtils(root_path=args.root_dir)
-sessions = dataset.get_sessions(filetype=[".mp4", ".flac"])
+sessions = dataset.get_sessions(filetype=[".mp4", ".flac", ".mid"])
 sessions = dataset.remove_noncomplete(sessions, required=["flac.splits_list",
-                                                          "video.splits_list"])
+                                                          "video.splits_list",
+                                                          "midi.splits_list"])
 
 # (session_id, video_path, flac_path, issue)
 invalid_session_list: List[Tuple[str, str, str, str]] = []
@@ -40,11 +41,13 @@ for session in tqdm(sessions):
     session.sort_audios()
     session.sort_videos()
 
-    for video_split, flac_split in zip(session.video.splits_list,
-                                       session.flac.splits_list):
-        integrity = Verify().check_video_flac(
+    for video_split, flac_split, midi_split in zip(session.video.splits_list,
+                                                   session.flac.splits_list,
+                                                   session.midi.splits_list):
+        integrity = Verify().run_checks(
             video=video_split,
-            flac=flac_split
+            flac=flac_split,
+            midi=midi_split
         )
         if integrity is not True:
             invalid_session_list.append((str(session.id),
