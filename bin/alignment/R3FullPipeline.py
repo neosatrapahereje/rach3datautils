@@ -23,7 +23,8 @@ parser.add_argument(
     action='store',
     help='The root directory where the dataset is located. All folders '
          'and subfolders in this directory will be searched.',
-    nargs="*"
+    nargs="*",
+    required=True
 )
 parser.add_argument(
     "-w", "--overwrite",

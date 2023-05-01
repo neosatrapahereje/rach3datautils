@@ -11,7 +11,7 @@ from rach3datautils.types import PathLike
 from rach3datautils.utils.track import Track
 from rach3datautils.utils.multimedia import MultimediaTools
 
-verification_issues = Literal["incorrect_len", "high_DTW"]
+verification_issues = Literal["incorrect_len", "high_DTW", "midi_DTW"]
 
 
 class Verify:
@@ -22,8 +22,8 @@ class Verify:
     def run_checks(self,
                    video: PathLike,
                    flac: PathLike,
-                   midi: PathLike) -> Union[verification_issues,
-                                            Literal[True]]:
+                   midi: Performance) -> Union[verification_issues,
+                                               Literal[True]]:
         """
         Check whether a video and flac file are sufficiently aligned.
 
@@ -71,6 +71,7 @@ class Verify:
         track_2 : Track
         perf : Performance
         threshold : float, optional
+            default is 0.5
 
         Returns
         -------
@@ -138,7 +139,7 @@ class Verify:
         if dist_func is None:
             dist_func = self.spec_dtw
         if threshold is None:
-            threshold = 2
+            threshold = 10
 
         dist = dist_func(spect_1[1], spect_2[1])
 
@@ -146,8 +147,7 @@ class Verify:
             return False
         return True
 
-    @staticmethod
-    def spec_dtw(spec_1: npt.NDArray, spec_2: npt.NDArray) -> float:
+    def spec_dtw(self, spec_1: npt.NDArray, spec_2: npt.NDArray) -> float:
         """
         Compare two spectrograms using DTW. Returns the normalized distance.
 
@@ -165,5 +165,36 @@ class Verify:
         spec_2_norm = (spec_2-np.min(spec_2))/(np.max(spec_2)-np.min(spec_2))
 
         dist, path = fastdtw(spec_1_norm, spec_2_norm, dist=cosine)
-        dist_norm = 1 - dist
+        dist_norm = self._calculate_path_norm(
+            path,
+            (spec_1.shape[0], spec_2.shape[0])
+        )
         return dist_norm
+
+    @staticmethod
+    def _calculate_path_norm(path: list[tuple[int, int]],
+                             dims: tuple[int ,int]):
+        """
+        Calculate the deviation of a DTW path from the diagonal and normalize
+        it.
+
+        Parameters
+        ----------
+        path : list[tuple[int, int]]
+            DTW path
+        dims : tuple[int, int]
+            The max (x, y) dimensions of the path space
+
+        Returns
+        -------
+        norm_dist : float
+            The total distance divided by the optimal distance. Should always
+            be more than 1. A higher number is worse.
+        """
+        optimal_slope = dims[1] / dims[0]
+        area = 0
+        for i in path:
+            area += abs(i[1] - i[0] * optimal_slope)
+        # Multiply by 100 because we'll get very small floats otherwise
+        area_norm = (area / ((dims[1] * dims[0]) / 2)) * 100
+        return area_norm
