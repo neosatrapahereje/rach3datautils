@@ -51,11 +51,24 @@ class Verify:
             return "midi_DTW"
         return True
 
-    def check_midi(self,
-                   midi: Performance,
-                   flac: PathLike) -> Literal[True, "midi_DTW"]:
+    @staticmethod
+    def check_midi(midi: Performance,
+                   flac: PathLike) -> bool:
+        """
+        Check a midi file against a flac file using their spectrogram's and
+        DTW.
+
+        Parameters
+        ----------
+        midi : Performance
+        flac : PathLike
+
+        Returns
+        -------
+        bool
+        """
         # TODO
-        ...
+        return True
 
     @staticmethod
     def check_len(track_1: Track,
