@@ -509,7 +509,9 @@ class MultimediaTools:
                 slice_ppart_by_time(
                     ppart=performed_part,
                     start_time=i[0],
-                    end_time=i[1]
+                    end_time=i[1],
+                    clip_note_off=True,
+                    reindex_notes=True
                 )
             )
         return subperformances
