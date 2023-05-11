@@ -446,9 +446,17 @@ class MultimediaTools:
         ffmpeg_return = out.run(capture_stderr=True)[1]
 
         # Parsing the output to get the time
-        encode_out = ffmpeg_return.split(b"\n")[46].split(b"\r")
-        encode_sub = encode_out[-1].split(b" ")
-        encode_sub.reverse()
+        split_return = ffmpeg_return.split(b"\n")
+        encode_sub = None
+        for i in split_return:
+            if i[:5] == b"size=":
+                encode_sub = i.split(b"\r")[-1].split(b" ")
+                encode_sub.reverse()
+                break
+
+        if encode_sub is None:
+            raise AttributeError("Could not parse the file.")
+
         time = []
         for i in encode_sub:
             if b"time=" in i:
