@@ -268,7 +268,7 @@ class Splits:
         """
         Check the lengths of sections to make sure they are within the limits
         set by max_section_len and min_section_len.
-        These limits are set when initializing the object.
+        These limits are set as class attributes.
 
         Parameters
         ----------
@@ -317,11 +317,17 @@ class Splits:
                     note_array["onset_sec"][prev_note]
         sect_len = end_note - prev_note
         if sect_time > self.max_section_size:
+            sections = []
             midpoint = prev_note + sect_len // 2
-            sections = [(prev_note, midpoint)]
-            sections.extend(self._check_max_len(note_array,
-                                                midpoint,
-                                                end_note))
+            new_sections_left = self._check_max_len(note_array,
+                                                    prev_note,
+                                                    midpoint)
+            sections.extend(new_sections_left)
+
+            new_sections_right = self._check_max_len(note_array,
+                                                     midpoint,
+                                                     end_note)
+            sections.extend(new_sections_right)
         else:
             return [(prev_note, end_note)]
         return sections
