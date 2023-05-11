@@ -1,4 +1,5 @@
 import argparse as ap
+import os
 from typing import List, Tuple
 import csv
 
@@ -7,6 +8,7 @@ from tqdm import tqdm
 from rach3datautils.alignment.verification import Verify
 from rach3datautils.utils.dataset import DatasetUtils
 from rach3datautils.utils.session import Session
+
 
 parser = ap.ArgumentParser(
     prog="R3CheckIntegrity",
@@ -26,6 +28,12 @@ parser.add_argument(
     required=False,
     type=str
 )
+parser.add_argument(
+    "-c", "--clean",
+    help="Whether to delete invalid files from the directory.",
+    required=False,
+    action="store_true"
+)
 args = parser.parse_args()
 
 dataset = DatasetUtils(root_path=args.root_dir)
@@ -36,7 +44,7 @@ sessions = dataset.remove_noncomplete(sessions, required=["flac.splits_list",
 
 # (session_id, video_path, flac_path, issue)
 invalid_session_list: List[Tuple[str, str, str, str]] = []
-
+invalid_sessions: List[Session] = []
 for session in tqdm(sessions):
     session.sort_audios()
     session.sort_videos()
@@ -54,6 +62,8 @@ for session in tqdm(sessions):
                                          video_split,
                                          flac_split,
                                          integrity))
+            if session not in invalid_sessions:
+                invalid_sessions.append(session)
 
 if args.output_filepath:
     with open(args.output_filepath, "w") as f:
@@ -61,5 +71,10 @@ if args.output_filepath:
         csv_writer.writerow(["session_id", "video_path", "flac_path", "issue"])
         csv_writer.writerows(invalid_session_list)
 else:
-    print("session_id, video_path, flac_path\n")
+    print("session_id, video_path, flac_path, issue\n")
     [print(i) for i in invalid_session_list]
+
+if args.clean:
+    for i in invalid_sessions:
+        for j in i.all_files():
+            os.unlink(j)

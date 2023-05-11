@@ -95,13 +95,13 @@ class Verify:
             threshold = 0.5
 
         last_note_mid = MultimediaTools.get_last_offset(perf)
-        last_note_t1 = track_1.frame_times[-1]
-        last_note_t2 = track_2.frame_times[-1]
+        duration_t1 = track_1.duration
+        duration_t2 = track_2.duration
 
-        if np.abs(last_note_t1 - last_note_t2) > threshold:
+        if np.abs(duration_t1 - duration_t2) > threshold:
             return False
-        elif np.abs(last_note_mid - last_note_t1) > threshold or \
-                np.abs(last_note_mid - last_note_t2) > threshold:
+        elif np.abs(last_note_mid - duration_t1) > threshold or \
+                np.abs(last_note_mid - duration_t2) > threshold:
             return False
         return True
 

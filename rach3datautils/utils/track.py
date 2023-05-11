@@ -74,6 +74,17 @@ class Track:
         )
         self.frame_times: npt.NDArray = self.calc_frame_times()
 
+    @property
+    def duration(self) -> float:
+        """
+        Get length of track in seconds.
+
+        Returns
+        -------
+        duration : float
+        """
+        return self.frame_times[-1]
+
     def get_frame(self, time: float) -> int:
         """
         Get the closest frame to a certain timestamp is seconds. Inverse of
