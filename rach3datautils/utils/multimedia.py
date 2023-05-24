@@ -607,3 +607,19 @@ class MultimediaTools:
             .reshape([-1, resolution[1], resolution[0], 3])
         )
         return video
+
+    def get_no_frames(self, filepath: PathLike) -> int:
+        """
+        Find the number of frames in a video with ffprobe. Assumes that the
+        video stream is at index zero.
+
+        Parameters
+        ----------
+        filepath : PathLike
+            path to a video file
+
+        Returns
+        -------
+        no_frames : int
+        """
+        probe = self.ff_probe(filepath)["streams"][0]["nb_frames"]
