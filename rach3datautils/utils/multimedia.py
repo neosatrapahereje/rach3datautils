@@ -581,24 +581,33 @@ class MultimediaTools:
 
     @staticmethod
     def load_video(filepath: PathLike,
-                   resolution: Tuple[int, int]) -> npt.NDArray:
+                   resolution: Tuple[int, int],
+                   frames: Tuple[int, int]) -> npt.NDArray:
         """
-        Load a video file directly into memory without the audio.
+        Load a video file directly into memory without the audio. This loads
+        an uncompressed video, so it can use a lot of memory.
 
         Parameters
         ----------
         filepath : PathLike
         resolution : Tuple[int, int]
             (width, height), e.g. (1920, 1080)
+        frames : Tuple[int, int]
+            start and stop frames for the section to be loaded
 
         Returns
         -------
         video_array : npt.NDArray
+            (T, H, W, C)
         """
+        if frames[1] - frames[0] < 0:
+            raise AttributeError("The second value in frames should be larger "
+                                 "than the first!")
         out, _ = (
             ffmpeg
-            .input(filepath)
-            .output('pipe:', format='rawvideo', pix_fmt='rgb24')
+            .input(filepath, ss=frames[0])
+            .output('pipe:', format='rawvideo', pix_fmt='rgb24',
+                    loglevel=FFMPEG_LOGLEVEL, vframes=frames[1]-frames[0])
             .run(capture_stdout=True)
         )
         video = (
