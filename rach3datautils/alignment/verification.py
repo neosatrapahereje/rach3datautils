@@ -2,14 +2,14 @@ from typing import Literal, Union, Optional, Callable
 
 import numpy as np
 import numpy.typing as npt
-from fastdtw import fastdtw
-from scipy.spatial.distance import cosine
-from partitura.performance import Performance
 import partitura as pt
+from fastdtw import fastdtw
+from partitura.performance import Performance
+from scipy.spatial.distance import cosine
 
 from rach3datautils.types import PathLike
-from rach3datautils.utils.track import Track
 from rach3datautils.utils.multimedia import MultimediaTools
+from rach3datautils.utils.track import Track
 
 verification_issues = Literal["incorrect_len", "high_DTW", "midi_DTW"]
 
@@ -22,7 +22,7 @@ class Verify:
     def run_checks(self,
                    video: PathLike,
                    flac: PathLike,
-                   midi: Performance) -> Union[verification_issues,
+                   midi: PathLike) -> Union[verification_issues,
                                                Literal[True]]:
         """
         Check whether a video and flac file are sufficiently aligned.
@@ -100,9 +100,10 @@ class Verify:
 
         if np.abs(duration_t1 - duration_t2) > threshold:
             return False
-        elif np.abs(last_note_mid - duration_t1) > threshold or \
-                np.abs(last_note_mid - duration_t2) > threshold:
-            return False
+        elif last_note_mid > duration_t1 or last_note_mid < duration_t1 - 6:
+            if np.abs(last_note_mid - duration_t1) > threshold or \
+                    np.abs(last_note_mid - duration_t2) > threshold:
+                return False
         return True
 
     def check_tracks(self,
@@ -186,7 +187,7 @@ class Verify:
 
     @staticmethod
     def _calculate_path_norm(path: list[tuple[int, int]],
-                             dims: tuple[int ,int]):
+                             dims: tuple[int, int]):
         """
         Calculate the deviation of a DTW path from the diagonal and normalize
         it.

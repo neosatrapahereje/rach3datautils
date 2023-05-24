@@ -3,7 +3,7 @@ import shutil
 import tempfile
 import warnings
 from pathlib import Path
-from typing import Optional, Union, overload, Literal, List, Dict
+from typing import Optional, Union, overload, Literal, List, Dict, Tuple
 
 import ffmpeg
 import numpy as np
@@ -248,8 +248,11 @@ class MultimediaTools:
         -------
         last_offset : float
         """
-        note_array = performance.note_array()
-        return note_array["onset_sec"][-1] + note_array["duration_sec"][-1]
+        return max([i["note_off"] for i in performance[0].notes])
+        # For some reason, using the note array gives incorrect times. I'll
+        # leave the code here for now and perhaps it gets fixed in the future.
+        # note_array = performance.note_array()
+        # return max(note_array["onset_sec"] + note_array["duration_sec"])
 
     @staticmethod
     def split_audio(audio_path: PathLike,
@@ -575,3 +578,32 @@ class MultimediaTools:
                                  dtype=np.int16)
         float_data = data_s16 * 0.5**15
         return float_data
+
+    @staticmethod
+    def load_video(filepath: PathLike,
+                   resolution: Tuple[int, int]) -> npt.NDArray:
+        """
+        Load a video file directly into memory without the audio.
+
+        Parameters
+        ----------
+        filepath : PathLike
+        resolution : Tuple[int, int]
+            (width, height), e.g. (1920, 1080)
+
+        Returns
+        -------
+        video_array : npt.NDArray
+        """
+        out, _ = (
+            ffmpeg
+            .input(filepath)
+            .output('pipe:', format='rawvideo', pix_fmt='rgb24')
+            .run(capture_stdout=True)
+        )
+        video = (
+            np
+            .frombuffer(out, np.uint8)
+            .reshape([-1, resolution[1], resolution[0], 3])
+        )
+        return video

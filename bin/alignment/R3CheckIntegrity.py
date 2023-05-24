@@ -1,14 +1,13 @@
 import argparse as ap
+import csv
 import os
 from typing import List, Tuple
-import csv
 
 from tqdm import tqdm
 
 from rach3datautils.alignment.verification import Verify
 from rach3datautils.utils.dataset import DatasetUtils
 from rach3datautils.utils.session import Session
-
 
 parser = ap.ArgumentParser(
     prog="R3CheckIntegrity",
