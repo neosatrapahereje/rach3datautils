@@ -23,7 +23,7 @@ class Verify:
                    video: PathLike,
                    flac: PathLike,
                    midi: PathLike) -> Union[verification_issues,
-                                               Literal[True]]:
+                                            Literal[True]]:
         """
         Check whether a video and flac file are sufficiently aligned.
 
@@ -47,7 +47,7 @@ class Verify:
             return "incorrect_len"
         elif not self.check_tracks(video_track, flac_track):
             return "high_DTW"
-        elif not self.check_midi(midi, flac):
+        elif not self.check_midi(perf, flac):
             return "midi_DTW"
         return True
 
