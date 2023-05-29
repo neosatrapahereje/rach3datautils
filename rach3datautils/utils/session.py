@@ -308,6 +308,7 @@ class Session:
         if midi_filepath is None:
             return
         self._performance = MultimediaTools.load_performance(midi_filepath)
+        self._performance[0].sustain_pedal_threshold = 127
 
     def set_unknown(self, value: Union[PathLike, list[PathLike]]) -> bool:
         """

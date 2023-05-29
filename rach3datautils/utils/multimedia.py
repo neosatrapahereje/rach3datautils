@@ -248,11 +248,8 @@ class MultimediaTools:
         -------
         last_offset : float
         """
-        return max([i["note_off"] for i in performance[0].notes])
-        # For some reason, using the note array gives incorrect times. I'll
-        # leave the code here for now and perhaps it gets fixed in the future.
-        # note_array = performance.note_array()
-        # return max(note_array["onset_sec"] + note_array["duration_sec"])
+        note_array = performance.note_array()
+        return max(note_array["onset_sec"] + note_array["duration_sec"])
 
     @staticmethod
     def split_audio(audio_path: PathLike,
