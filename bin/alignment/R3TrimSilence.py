@@ -1,12 +1,13 @@
 import argparse as ap
 from pathlib import Path
-from rach3datautils.utils.dataset import DatasetUtils
-from rach3datautils.utils.session import Session
-from rach3datautils.alignment.trim_silence import trim
-from rach3datautils.exceptions import MissingFilesError
 from typing import List
+
 from tqdm import tqdm
 
+from rach3datautils.alignment.trim_silence import trim
+from rach3datautils.exceptions import MissingFilesError
+from rach3datautils.utils.dataset import DatasetUtils
+from rach3datautils.utils.session import Session
 
 parser = ap.ArgumentParser(
     prog="Silence Trimmer",

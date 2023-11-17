@@ -1,17 +1,17 @@
 import logging
-
-import partitura as pt
-from partitura.performance import Performance
 from pathlib import Path
 from typing import Optional, Union, List, Tuple
-from rach3datautils.exceptions import MissingFilesError, SyncError
-from rach3datautils.utils.multimedia import MultimediaTools
-from rach3datautils.alignment.sync import load_and_sync
-from rach3datautils.types import timestamps, note_sections, PathLike
-from rach3datautils.config import LOGLEVEL
+
 import numpy as np
 import numpy.typing as npt
+import partitura as pt
+from partitura.performance import Performance
 
+from rach3datautils.alignment.sync import load_and_sync
+from rach3datautils.config import LOGLEVEL
+from rach3datautils.exceptions import MissingFilesError, SyncError
+from rach3datautils.types import timestamps, note_sections, PathLike
+from rach3datautils.utils.multimedia import MultimediaTools
 
 logger = logging.getLogger(__name__)
 logger.setLevel(LOGLEVEL)
@@ -202,7 +202,7 @@ class Splits:
             start_time = prev_time + start_note
 
             end_note = note_array['onset_sec'][i[1]] - \
-                       note_array['onset_sec'][prev_note]
+                note_array['onset_sec'][prev_note]
             end_time = prev_time + end_note
 
             try:
@@ -268,7 +268,7 @@ class Splits:
         """
         Check the lengths of sections to make sure they are within the limits
         set by max_section_len and min_section_len.
-        These limits are set when initializing the object.
+        These limits are set as class attributes.
 
         Parameters
         ----------
@@ -317,11 +317,17 @@ class Splits:
                     note_array["onset_sec"][prev_note]
         sect_len = end_note - prev_note
         if sect_time > self.max_section_size:
+            sections = []
             midpoint = prev_note + sect_len // 2
-            sections = [(prev_note, midpoint)]
-            sections.extend(self._check_max_len(note_array,
-                                                midpoint,
-                                                end_note))
+            new_sections_left = self._check_max_len(note_array,
+                                                    prev_note,
+                                                    midpoint)
+            sections.extend(new_sections_left)
+
+            new_sections_right = self._check_max_len(note_array,
+                                                     midpoint,
+                                                     end_note)
+            sections.extend(new_sections_right)
         else:
             return [(prev_note, end_note)]
         return sections
@@ -423,7 +429,7 @@ def split_va_at_timestamps(splits: List[timestamps],
     """
     for split_no, (start, end) in enumerate(splits):
         output_path_video = output_dir.joinpath(
-            file.stem + f"_split{split_no + 1}" + file.suffix
+            "rach3_" + file.stem + f"_split{split_no + 1}" + file.suffix
         )
 
         if output_path_video.exists() and not overwrite:

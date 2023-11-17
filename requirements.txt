@@ -1,9 +1,10 @@
 numpy~=1.24.2
 scipy==1.10.1
 git+https://github.com/CPJKU/madmom@main#egg=madmom
-git+https://github.com/iv-pil/partitura@featuredev#egg=partitura
+git+https://github.com/CPJKU/partitura@fix_248#egg=partitura
 tqdm==4.65.0
-ffmpeg-python==0.2.0
 python-dotenv==1.0.0
 filedate==2.0
-setuptools==67.6.1
+setuptools==67.7.1
+fastdtw~=0.3.4
+ffmpeg-python~=0.2.0

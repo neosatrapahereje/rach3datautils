@@ -1,10 +1,12 @@
 from typing import Optional
-from rach3datautils.utils.multimedia import MultimediaTools
-from rach3datautils.types import PathLike
-from rach3datautils.alignment.sync import load_and_sync
-from rach3datautils.exceptions import MissingFilesError
+
 import numpy as np
 from partitura.performance import Performance
+
+from rach3datautils.alignment.sync import load_and_sync
+from rach3datautils.exceptions import MissingFilesError
+from rach3datautils.types import PathLike
+from rach3datautils.utils.multimedia import MultimediaTools
 
 
 def trim(audio: PathLike,

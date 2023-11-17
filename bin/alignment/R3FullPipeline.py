@@ -2,15 +2,16 @@
 Script that handles full preprocessing of Rach3 dataset for use with ML.
 """
 
-from pathlib import Path
 import argparse as ap
 import os
-from tqdm import tqdm
-from rach3datautils.utils.dataset import DatasetUtils
 import tempfile
+from pathlib import Path
+
+from tqdm import tqdm
+
 from rach3datautils.alignment.extract_and_concat import extract_and_concat
 from rach3datautils.alignment.split import split_video_flac_mid
-
+from rach3datautils.utils.dataset import DatasetUtils
 
 parser = ap.ArgumentParser(
     prog="Audio Alignment Pipeline",
@@ -22,7 +23,8 @@ parser.add_argument(
     action='store',
     help='The root directory where the dataset is located. All folders '
          'and subfolders in this directory will be searched.',
-    nargs="*"
+    nargs="*",
+    required=True
 )
 parser.add_argument(
     "-w", "--overwrite",

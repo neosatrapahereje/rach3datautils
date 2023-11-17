@@ -1,11 +1,12 @@
 import argparse
-from rach3datautils.utils.dataset import DatasetUtils
 import os
-from typing import Literal
-from rach3datautils.alignment.extract_and_concat import extract_and_concat
 from pathlib import Path
+from typing import Literal
+
 from tqdm import tqdm
 
+from rach3datautils.alignment.extract_and_concat import extract_and_concat
+from rach3datautils.utils.dataset import DatasetUtils
 
 parser = argparse.ArgumentParser(
     prog="Extract audio/video and concatenate",

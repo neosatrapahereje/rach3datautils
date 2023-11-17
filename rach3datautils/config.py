@@ -10,7 +10,7 @@ except ModuleNotFoundError:
     pass
 
 LOGLEVELS = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
-LOGLEVEL: Union[LOGLEVELS, str] = os.getenv("RACH3DATAUTILS_LOGLEVEL", "INFO")
+LOGLEVEL: Union[LOGLEVELS, str] = os.getenv("RACH3DATAUTILS_LOGLEVEL", "ERROR")
 
 logging.basicConfig(level=LOGLEVEL)
 logger = logging.getLogger("rach3datautils")

@@ -1,10 +1,11 @@
-import os
-import filecmp
 import datetime
+import filecmp
+import os
+from pathlib import Path
+from typing import Optional
+
 from rach3datautils.types import PathLike
 from rach3datautils.utils.path import PathUtils
-from typing import Optional
-from pathlib import Path
 
 
 def backup_dir(

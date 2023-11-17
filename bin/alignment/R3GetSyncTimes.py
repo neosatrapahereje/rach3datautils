@@ -1,12 +1,13 @@
 import argparse as ap
-from rach3datautils.utils.dataset import DatasetUtils
-from rach3datautils.alignment.sync import load_and_sync, Sync
-from rach3datautils.types import timestamps
+import csv
 from pathlib import Path
 from typing import List, Tuple
-from tqdm import tqdm
-import csv
 
+from tqdm import tqdm
+
+from rach3datautils.alignment.sync import load_and_sync, Sync
+from rach3datautils.types import timestamps
+from rach3datautils.utils.dataset import DatasetUtils
 
 parser = ap.ArgumentParser(
     prog="Audio Synchronizer",

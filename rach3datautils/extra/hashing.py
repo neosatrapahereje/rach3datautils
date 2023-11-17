@@ -1,15 +1,17 @@
 """
 Miscellaneous utilities
 """
-import subprocess
+import glob
 import hashlib
+import os
 import platform
-from rach3datautils.types import PathLike
+import subprocess
 from typing import Union, List
+
 import numpy as np
 from tqdm import tqdm
-import glob
-import os
+
+from rach3datautils.types import PathLike
 
 
 class Hashing:
