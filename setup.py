@@ -17,10 +17,18 @@ REQUIRES_PYTHON = ">=3.9"
 VERSION = "0.0.1"
 
 # Required packages
-REQUIRED = ["partitura", "ffmpeg-python", "numpy", "madmom", "scipy"]
+REQUIRED = [
+    "partitura==1.4.1",
+    "ffmpeg-python==0.2.0",
+    "numpy==1.26.2",
+    "madmom",
+    "scipy==1.11.3",
+    "tqdm==4.66.1",
+    "fastdtw==0.3.4"
+]
 
 # Optional
-extra = ["filedate", "tqdm", "python-dotenv"]
+extra = ["filedate", "python-dotenv"]
 EXTRAS = {
     "EXTRA": extra,
 }
