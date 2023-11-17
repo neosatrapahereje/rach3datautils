@@ -1,6 +1,6 @@
 import argparse as ap
-from rach3datautils.extra.backup_files import backup_dir
 
+from rach3datautils.extra.backup_files import backup_dir
 
 parser = ap.ArgumentParser(
     description="Script for syncing two directories"

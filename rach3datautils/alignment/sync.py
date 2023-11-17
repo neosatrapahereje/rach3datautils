@@ -1,199 +1,26 @@
-import madmom
-from madmom.audio.signal import FramedSignal
-from rach3datautils.exceptions import MissingFilesError
+from typing import Tuple, Optional, TypedDict, Callable
+
 import numpy as np
 import numpy.typing as npt
-from typing import Tuple, Optional, TypedDict
-from rach3datautils.types import PathLike
 import scipy.spatial as sp
 from partitura.performance import Performance
+
+from rach3datautils.exceptions import MissingFilesError
 from rach3datautils.exceptions import SyncError
+from rach3datautils.types import PathLike, timestamps
+from rach3datautils.utils.track import Track, TrackArgs
 
-
-# (session ID, first note, last note)
-time_section = Tuple[float, float]
-timestamps = Tuple[str, time_section]
+# A tuple with start and end frame
 frame_section = Tuple[int, int]
 
 
-# These TypedDicts are useful for specifying inputs to the load_and_sync func.
-class TrackArgs(TypedDict, total=False):
-    frame_size: Optional[int]
-    sample_rate: Optional[int]
-    hop_size: Optional[float]
-
-
+# This TypedDict is useful for specifying inputs to the load_and_sync func.
 class SyncArgs(TypedDict, total=False):
     notes_index: Optional[Tuple[int, int]]
     window_size: Optional[int]
     stride: Optional[int]
     search_period: Optional[int]
-    start_end_times: Optional[time_section]
-
-
-class Track:
-    """
-    Class for a single track, to be used in the Sync class when representing
-    the two tracks being synced.
-    """
-    FRAME_SIZE = 8372
-    SAMPLE_RATE = 44100
-    HOP_SIZE = int(np.round(SAMPLE_RATE * 0.025))
-
-    def __init__(self,
-                 filepath: PathLike,
-                 frame_size: Optional[int] = None,
-                 sample_rate: Optional[int] = None,
-                 hop_size: Optional[float] = None):
-        """
-        Parameters
-        ----------
-        filepath : PathLike
-            path to the track including filename
-        frame_size : int, optional
-            track frame size to use when loading, default: 8372
-        sample_rate : int, optional
-            sample rate to be used when loading, default: 44100
-        hop_size : float, optional
-            essentially the resolution, default: 1102
-        """
-        if frame_size is None:
-            frame_size = self.FRAME_SIZE
-        if sample_rate is None:
-            sample_rate = self.SAMPLE_RATE
-        if hop_size is None:
-            hop_size = self.HOP_SIZE
-
-        self.hop_size = hop_size
-        self.sample_rate = sample_rate
-
-        self.signal: FramedSignal = self.load_framed_signal(
-            filepath=filepath,
-            frame_size=frame_size,
-            hop_size=hop_size,
-            sample_rate=sample_rate
-        )
-        self.frame_times: npt.NDArray = self.calc_frame_times()
-
-    def getframe(self, time: float) -> int:
-        """
-        Get the closest frame to a certain timestamp is seconds. Inverse of
-        gettime.
-
-        Parameters
-        ----------
-        time : float
-            timestamp in seconds
-
-        Returns
-        -------
-        frame : int
-            the frame index closest to the time given
-        """
-        return abs((self.frame_times - time)).argmin()
-
-    def calc_frame_times(self) -> npt.NDArray:
-        """
-        Calculate the frame times of the signal.
-
-        Returns
-        -------
-        frame_times : npt.NDArray
-            has an index for every frame at which you can see the time
-        """
-        return np.arange(
-            self.signal.shape[0]
-        ) * (self.hop_size / self.sample_rate)
-
-    @staticmethod
-    def load_framed_signal(filepath: PathLike,
-                           frame_size: int,
-                           hop_size: int,
-                           sample_rate: int) -> FramedSignal:
-        """
-        Load a file into a signal.
-
-        Parameters
-        ----------
-        filepath : PathLike
-            path to audio file
-        frame_size : int
-            frame size to use when loading the Signal
-        hop_size : int
-            hop size to use when loading the FramedSignal
-        sample_rate : int
-            sample rate to use when loading the Signal
-
-        Returns
-        -------
-        framed_signal : FramedSignal
-        """
-        signal = madmom.audio.Signal(
-            str(filepath),
-            sample_rate=sample_rate,
-            num_channels=1,
-            norm=True,
-        )
-        f_signal = madmom.audio.FramedSignal(
-            signal=signal,
-            frame_size=frame_size,
-            hop_size=hop_size
-        )
-
-        return f_signal
-
-    def calc_log_spect_section(
-            self,
-            start: Optional[float] = None,
-            end: Optional[float] = None,
-            spectrogram_clip: Optional[Tuple[int, int]] = None
-    ) -> Tuple[time_section, npt.NDArray]:
-        """
-        Generate a certain section of the log_spectrogram given start and end
-        points.
-        Uses the logarithmic filtered spectrogram by default.
-        If start/end points are none then the entire signal is used.
-
-        spectrogram_clip specifies the start and end of the frequency bands
-        index, useful for reducing ram usage and improving performance if you
-        don't need the whole range of frequency bands.
-
-        Parameters
-        ----------
-        start : float, optional
-            start time in seconds
-        end : float, optional
-            end time in seconds
-        spectrogram_clip : Tuple[int, int], optional
-            tuple of indexes. Frequency bands within these
-            indexes will be kept.
-
-        Returns
-        -------
-        start_end_spectrogram : Tuple[time_section, npt.NDArray]
-            exact start and end times of spectrogram, spectrogram
-        """
-        if start is None:
-            start = 0
-        if end is None:
-            end = self.signal.shape[0]
-        if spectrogram_clip is None:
-            spectrogram_clip = (10, 40)
-
-        start = self.getframe(start)
-        end = self.getframe(end)
-
-        if end - start <= 0:
-            raise AttributeError("The given end should be larger than the "
-                                 "start.")
-
-        spec = np.array(
-            madmom.audio.LogarithmicFilteredSpectrogram(
-                self.signal[start:end][:]
-            )
-        )[:, spectrogram_clip[0]:spectrogram_clip[1]]
-
-        return (self.frame_times[start], self.frame_times[end]), spec
+    start_end_times: Optional[timestamps]
 
 
 class Sync:
@@ -230,8 +57,8 @@ class Sync:
                         window_size: Optional[int] = None,
                         stride: Optional[int] = None,
                         search_period: Optional[int] = None,
-                        start_end_times: Optional[time_section] = None
-                        ) -> time_section:
+                        start_end_times: Optional[timestamps] = None
+                        ) -> timestamps:
         """
         Get the timestamps for the first and last note given 2 audio files and
         a midi file.
@@ -352,7 +179,7 @@ class Sync:
                                track: Track,
                                section_size: float,
                                section_midpoint: float,
-                               ) -> Tuple[time_section, npt.NDArray]:
+                               ) -> Tuple[timestamps, npt.NDArray]:
         """
         Generate windows within 2 given boundaries. Returns the windows and
         the start and end points of the boundaries.
@@ -441,8 +268,8 @@ def load_and_sync(
         audio: PathLike,
         track_args: Optional[TrackArgs] = None,
         sync_args: Optional[SyncArgs] = None,
-        sync_distance_func: Optional = None
-) -> time_section:
+        sync_distance_func: Optional[Callable] = None
+) -> timestamps:
     """
     Function that handles loading flac and audio from a subsession and then
     syncing them using the Sync and Track objects respectively.
@@ -459,7 +286,7 @@ def load_and_sync(
         optional args to be passed to the Track object
     sync_args : SyncArgs, optional
         optional args to be passed to the Sync object
-    sync_distance_func : func, optional
+    sync_distance_func : Callable, optional
         optional custom distance function
 
     Returns

@@ -1,11 +1,11 @@
-from pathlib import Path
 from collections import defaultdict
+from pathlib import Path
 from typing import Union, Literal, List, Optional
-from rach3datautils.utils.session import Session, SessionIdentity
-from rach3datautils.utils.path import PathUtils, suffixes_list, suffixes
-from rach3datautils.types import PathLike
-from rach3datautils.exceptions import IdentityError
 
+from rach3datautils.exceptions import IdentityError
+from rach3datautils.types import PathLike
+from rach3datautils.utils.path import PathUtils, suffixes_list, suffixes
+from rach3datautils.utils.session import Session, SessionIdentity
 
 valid_input_filetypes = Union[list[suffixes], suffixes, Literal["*"]]
 

@@ -1,17 +1,20 @@
-import warnings
-from typing import Optional, Union, overload, Literal, List
-import shutil
-from pathlib import Path
 import os
+import shutil
 import tempfile
-import ffmpeg
-import partitura as pt
-from partitura.utils.music import slice_ppart_by_time
-from partitura.performance import PerformedPart
-from partitura.performance import Performance
-from rach3datautils.types import PathLike, timestamps
-from rach3datautils.config import LOGLEVEL
+import warnings
+from pathlib import Path
+from typing import Optional, Union, overload, Literal, List, Dict, Tuple
 
+import ffmpeg
+import numpy as np
+import numpy.typing as npt
+import partitura as pt
+from partitura.performance import Performance
+from partitura.performance import PerformedPart
+from partitura.utils.music import slice_ppart_by_time
+
+from rach3datautils.config import LOGLEVEL
+from rach3datautils.types import PathLike, timestamps
 
 FFMPEG_LOGLEVELS = {
     "DEBUG": "debug",
@@ -233,6 +236,22 @@ class MultimediaTools:
         return note_array[-1][0]
 
     @staticmethod
+    def get_last_offset(performance: Performance):
+        """
+        Last note in note array + duration of that note
+
+        Parameters
+        ----------
+        performance : Performance
+
+        Returns
+        -------
+        last_offset : float
+        """
+        note_array = performance.note_array()
+        return max(note_array["onset_sec"] + note_array["duration_sec"])
+
+    @staticmethod
     def split_audio(audio_path: PathLike,
                     split_start: float,
                     split_end: float,
@@ -427,9 +446,17 @@ class MultimediaTools:
         ffmpeg_return = out.run(capture_stderr=True)[1]
 
         # Parsing the output to get the time
-        encode_out = ffmpeg_return.split(b"\n")[46].split(b"\r")
-        encode_sub = encode_out[-1].split(b" ")
-        encode_sub.reverse()
+        split_return = ffmpeg_return.split(b"\n")
+        encode_sub = None
+        for i in split_return:
+            if i[:5] == b"size=":
+                encode_sub = i.split(b"\r")[-1].split(b" ")
+                encode_sub.reverse()
+                break
+
+        if encode_sub is None:
+            raise AttributeError("Could not parse the file.")
+
         time = []
         for i in encode_sub:
             if b"time=" in i:
@@ -482,7 +509,123 @@ class MultimediaTools:
                 slice_ppart_by_time(
                     ppart=performed_part,
                     start_time=i[0],
-                    end_time=i[1]
+                    end_time=i[1],
+                    clip_note_off=True,
+                    reindex_notes=True
                 )
             )
         return subperformances
+
+    @staticmethod
+    def read_raw_audio(filepath: PathLike,
+                       sample_rate: int,
+                       input_kwargs: Optional[Dict] = None) -> bytes:
+        """
+        Read audio from a file using FFMPEG.
+
+        Parameters
+        ----------
+        filepath : PathLike
+        sample_rate : int
+        input_kwargs : Dict
+            any additional arguments you want to pass
+
+        Returns
+        -------
+        PCM_bytes : bytes
+            the raw PCM audio as bytes
+        """
+        if input_kwargs is None:
+            input_kwargs = {}
+
+        out, _ = (
+            ffmpeg.input(
+                filepath, **input_kwargs
+            ).output(
+                '-', format='s16le', acodec='pcm_s16le', ac=1, ar=sample_rate,
+                loglevel=FFMPEG_LOGLEVEL
+            ).overwrite_output(
+            ).run(
+                capture_stdout=True
+            )
+        )
+        return out
+
+    def load_file_audio(self,
+                        filepath: PathLike,
+                        sample_rate: int) -> npt.NDArray:
+        """
+        Load audio from a file directly into a numpy array using FFMPEG.
+
+        Parameters
+        ----------
+        filepath : PathLike
+        sample_rate : int
+
+        Returns
+        -------
+        PCM_array
+            Numpy array containing the PCM audio data
+        """
+        raw_data = self.read_raw_audio(
+            filepath=filepath,
+            sample_rate=sample_rate
+        )
+        data_s16 = np.frombuffer(raw_data,
+                                 dtype=np.int16)
+        float_data = data_s16 * 0.5**15
+        return float_data
+
+    @staticmethod
+    def load_video(filepath: PathLike,
+                   resolution: Tuple[int, int],
+                   frames: Tuple[int, int]) -> npt.NDArray:
+        """
+        Load a video file directly into memory without the audio. This loads
+        an uncompressed video, so it can use a lot of memory.
+
+        Parameters
+        ----------
+        filepath : PathLike
+        resolution : Tuple[int, int]
+            (width, height), e.g. (1920, 1080)
+        frames : Tuple[int, int]
+            start and stop frames for the section to be loaded
+
+        Returns
+        -------
+        video_array : npt.NDArray
+            (T, H, W, C)
+        """
+        if frames[1] - frames[0] < 0:
+            raise AttributeError("The second value in frames should be larger "
+                                 "than the first!")
+        out, _ = (
+            ffmpeg
+            .input(filepath, ss=frames[0])
+            .output('pipe:', format='rawvideo', pix_fmt='rgb24',
+                    loglevel=FFMPEG_LOGLEVEL, vframes=frames[1]-frames[0])
+            .run(capture_stdout=True)
+        )
+        video = (
+            np
+            .frombuffer(out, np.uint8)
+            .reshape([-1, resolution[1], resolution[0], 3])
+        )
+        return video
+
+    def get_no_frames(self, filepath: PathLike) -> int:
+        """
+        Find the number of frames in a video with ffprobe. Assumes that the
+        video stream is at index zero.
+
+        Parameters
+        ----------
+        filepath : PathLike
+            path to a video file
+
+        Returns
+        -------
+        no_frames : int
+        """
+        probe = self.ff_probe(filepath)["streams"][0]["nb_frames"]

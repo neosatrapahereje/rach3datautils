@@ -1,10 +1,12 @@
 from pathlib import Path
-from rach3datautils.utils.path import PathUtils
-from rach3datautils.types import PathLike
-from rach3datautils.exceptions import IdentityError
-from rach3datautils.utils.multimedia import MultimediaTools
 from typing import Union, Optional, List, Tuple, Literal
+
 from partitura.performance import Performance
+
+from rach3datautils.exceptions import IdentityError
+from rach3datautils.types import PathLike
+from rach3datautils.utils.multimedia import MultimediaTools
+from rach3datautils.utils.path import PathUtils
 
 full_session_id = Tuple[str, str]  # (date, subsession_no)
 # A file can either be composed of many parts, "multi", or just be one part
@@ -142,6 +144,13 @@ class SessionFile:
 
     @property
     def splits_list(self) -> List[Optional[Path]]:
+        """
+        List of files that make up the original file after its been split.
+
+        Returns
+        -------
+        splits_list : List[Optional[Path]]
+        """
         return self._splits_list
 
     @splits_list.setter
@@ -150,6 +159,13 @@ class SessionFile:
 
     @property
     def file_list(self) -> List[Optional[Path]]:
+        """
+        The list of files that represent one large recording.
+
+        Returns
+        -------
+        file_list : List[Optional[Path]]
+        """
         return self._file_list
 
     @file_list.setter
@@ -161,6 +177,13 @@ class SessionFile:
 
     @property
     def file(self) -> Path:
+        """
+        Path to the actual file represented by the object.
+
+        Returns
+        -------
+        file : Path
+        """
         return self._file
 
     @file.setter
@@ -175,6 +198,13 @@ class SessionFile:
 
     @property
     def trimmed(self) -> Path:
+        """
+        Path to the trimmed version of the file.
+
+        Returns
+        -------
+        trimmed_file : Path
+        """
         return self._trimmed
 
     @trimmed.setter
@@ -186,6 +216,20 @@ class SessionFile:
         value = Path(value)
         self.id.check_identity(value)
         self._trimmed = value
+
+    def all_files(self):
+        """
+        Get all files in the SessionFile object.
+
+        Returns
+        -------
+        file_list : List[PathLike]
+        """
+        all_files = [self.file, self.trimmed]
+        all_files.extend(self.splits_list)
+        all_files.extend(self.file_list)
+        files_list = [i for i in all_files if i is not None]
+        return files_list
 
 
 class Session:
@@ -264,6 +308,7 @@ class Session:
         if midi_filepath is None:
             return
         self._performance = MultimediaTools.load_performance(midi_filepath)
+        self._performance[0].sustain_pedal_threshold = 127
 
     def set_unknown(self, value: Union[PathLike, list[PathLike]]) -> bool:
         """
@@ -355,3 +400,17 @@ class Session:
             except AttributeError:
                 return False
         return True
+
+    def all_files(self):
+        """
+        Get all the files in the Session object.
+
+        Returns
+        -------
+        file_list : List[Path]
+        """
+        file_list = []
+        for i in [self.audio, self.video, self.midi, self.flac]:
+            file_list.extend(i.all_files())
+
+        return file_list

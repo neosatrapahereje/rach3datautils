@@ -1,6 +1,6 @@
-from rach3datautils.extra.hashing import check_hashes
 import argparse as ap
 
+from rach3datautils.extra.hashing import check_hashes
 
 if __name__ == "__main__":
     parser = ap.ArgumentParser(
