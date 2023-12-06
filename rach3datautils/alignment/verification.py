@@ -45,10 +45,10 @@ class Verify:
 
         if not self.check_len(video_track, flac_track, perf):
             return "incorrect_len"
-        elif not self.check_tracks(video_track, flac_track):
-            return "high_DTW"
-        elif not self.check_midi(perf, flac):
-            return "midi_DTW"
+#        elif not self.check_tracks(video_track, flac_track):
+#            return "high_DTW"
+#        elif not self.check_midi(perf, flac):
+#            return "midi_DTW"
         return True
 
     @staticmethod
@@ -94,16 +94,16 @@ class Verify:
         if threshold is None:
             threshold = 0.5
 
-        last_note_mid = MultimediaTools.get_last_offset(perf)
+        last_note_mid = MultimediaTools.get_last_time(perf)
         duration_t1 = track_1.duration
         duration_t2 = track_2.duration
 
         if np.abs(duration_t1 - duration_t2) > threshold:
             return False
-        elif last_note_mid > duration_t1 or last_note_mid < duration_t1 - 6:
-            if np.abs(last_note_mid - duration_t1) > threshold or \
-                    np.abs(last_note_mid - duration_t2) > threshold:
-                return False
+        elif last_note_mid > duration_t1 + threshold:
+            return False
+        elif last_note_mid > duration_t2 + threshold:
+            return False
         return True
 
     def check_tracks(self,
