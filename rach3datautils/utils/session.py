@@ -134,18 +134,13 @@ class SessionFile:
         self._file: Optional[Path] = None
         self._trimmed: Optional[Path] = None
 
-    def _list_type_setter(self, value):
-        values = [Path(i) for i in value]
-        if not values:
-            return
-
+    def _list_id_check(self, values: List[Path]):
         [self.id.check_identity(i) for i in values]
-        self._file_list = value
 
     @property
     def splits_list(self) -> List[Optional[Path]]:
         """
-        List of files that make up the original file after its been split.
+        List of files that make up the original file after it's been split.
 
         Returns
         -------
@@ -155,7 +150,12 @@ class SessionFile:
 
     @splits_list.setter
     def splits_list(self, value: List[Optional[PathLike]]):
-        self._list_type_setter(value=value)
+        if not value:
+            return
+        paths = [Path(i) for i in value]
+        self._list_id_check(values=paths)
+        paths.sort(key=PathUtils().get_split_num_id)
+        self._splits_list = paths
 
     @property
     def file_list(self) -> List[Optional[Path]]:
@@ -172,8 +172,11 @@ class SessionFile:
     def file_list(self, value: List[Optional[PathLike]]):
         if self.type != "multi":
             return
-
-        self._list_type_setter(value=value)
+        if not value:
+            return
+        paths = [Path(i) for i in value]
+        self._list_id_check(values=paths)
+        self._file_list = paths
 
     @property
     def file(self) -> Path:
@@ -339,6 +342,7 @@ class Session:
             if filetype in self.SPLIT_KEYS:
                 attribute: SessionFile = getattr(self, filetype[6:])
                 attribute.splits_list.append(file)
+                attribute.splits_list = attribute.splits_list
 
             if filetype in self.LIST_PATH_KEYS:
                 attribute: SessionFile = getattr(self, filetype)

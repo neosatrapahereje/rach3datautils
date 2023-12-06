@@ -1,6 +1,8 @@
 import re
 from pathlib import Path
 from typing import Union, Literal, Tuple, get_args, List
+from datetime import datetime
+import time
 
 from rach3datautils.exceptions import IdentityError
 
@@ -323,3 +325,46 @@ class PathUtils:
         """
         files = [Path(j) for j in root.rglob('*' + filetype)]
         return files
+
+    @staticmethod
+    def get_split_no(file: Path):
+        """
+        Get what split a file is as an int.
+
+        Parameters
+        ----------
+        file : Path
+
+        Returns
+        -------
+        int
+        """
+        no = re.search(pattern="\\d{1,2}",
+                       string=file.stem.split("_")[-1]).group()
+        return int(no)
+
+    def get_split_num_id(self, file: Path):
+        """
+        Combine the date and split number values into one int which can
+        be used when sorting a list of splits.
+        The split number is padded to a length of two, if your split is
+        larger than 99 this will cause an error.
+
+        Parameters
+        ----------
+        file : Path
+
+        Returns
+        -------
+        split_id : int
+            An int with the first half representing the date and end
+            representing split number.
+        """
+        date = self.get_date(file)
+        date_parsed = datetime.strptime(date, "%Y-%m-%d")
+        split_no = self.get_split_no(file)
+        if split_no >= 100:
+            raise AttributeError("Cannot get split_num_id of a split "
+                                 "that's larger than 100.")
+        split_id = int(time.mktime(date_parsed.timetuple()))*100+split_no
+        return split_id
