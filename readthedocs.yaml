@@ -1,0 +1,27 @@
+# .readthedocs.yaml
+# Read the Docs configuration file
+# See https://docs.readthedocs.io/en/stable/config-file/v2.html for details
+
+# Required
+version: 2
+
+# Set the OS, Python version and other tools
+build:
+  os: ubuntu-22.04
+  tools:
+    python: "3.9"
+  jobs:
+    # Use autodoc to generate stubs automatically:
+    pre_build:
+      - sphinx-apidoc -o docs/sources rach3datautils    
+
+sphinx:
+   configuration: docs/conf.py
+
+# Optional but recommended, declare the Python requirements required
+# See https://docs.readthedocs.io/en/stable/guides/reproducible-builds.html
+python:
+   install:
+   - requirements: docs/requirements.txt
+   - method: pip
+     path: .
