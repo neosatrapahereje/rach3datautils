@@ -108,19 +108,21 @@ class SessionIdentity:
 class SessionFile:
     """
     Generic class representing either a single file, or a group of files that
-    represent a single recording filetype.
+    represent a single recording.
 
     Can group together files that may have multiple pieces, such that you can
     access the files as a list, or the single concatenated file as a filepath.
     Can also be used to store single files.
 
     Checks when a property is set whether it's valid. Also makes sure all paths
-    are Path objects.
+    are Path objects. The split lists are also sorted every time they're
+    set to guarantee that different SessionFile objects have the same
+    sorting.
     """
 
     def __init__(self,
                  identity: SessionIdentity,
-                 file_type: session_file_types):
+                 file_type: session_file_types) -> None:
         """
         Parameters
         ----------
@@ -134,13 +136,22 @@ class SessionFile:
         self._file: Optional[Path] = None
         self._trimmed: Optional[Path] = None
 
-    def _list_id_check(self, values: List[Path]):
+    def _list_id_check(self, values: List[Path]) -> None:
         [self.id.check_identity(i) for i in values]
 
     @property
     def splits_list(self) -> List[Optional[Path]]:
         """
-        List of files that make up the original file after it's been split.
+        List of files that make up the original file after it's been
+        split as part of the alignment process from
+        :func:`split_video_flac_mid`. This list is automatically
+        sorted by date every time it's set.
+
+        Because the list is sorted, it's easy to iterate through a
+        session simply by zipping all the split lists in the session.
+        To maintain this property, please refrain from modifying the
+        actual list itself. Instead, when modifying the list, call the
+        list setter, which auto-sorts it.
 
         Returns
         -------
@@ -149,18 +160,26 @@ class SessionFile:
         return self._splits_list
 
     @splits_list.setter
-    def splits_list(self, value: List[Optional[PathLike]]):
+    def splits_list(self, value: List[Optional[PathLike]]) -> None:
         if not value:
             return
         paths = [Path(i) for i in value]
         self._list_id_check(values=paths)
-        paths.sort(key=PathUtils().get_split_num_id)
         self._splits_list = paths
+        self.sort_splits()
+
+    def sort_splits(self) -> None:
+        """
+        Sort the list of splits. Does nothing if the list does not exist.
+        """
+        if not self.splits_list:
+            return
+        self.splits_list.sort(key=PathUtils().get_split_num_id)
 
     @property
     def file_list(self) -> List[Optional[Path]]:
         """
-        The list of files that represent one large recording.
+        The list of files that represent one larger recording.
 
         Returns
         -------
@@ -169,7 +188,7 @@ class SessionFile:
         return self._file_list
 
     @file_list.setter
-    def file_list(self, value: List[Optional[PathLike]]):
+    def file_list(self, value: List[Optional[PathLike]]) -> None:
         if self.type != "multi":
             return
         if not value:
@@ -179,9 +198,11 @@ class SessionFile:
         self._file_list = paths
 
     @property
-    def file(self) -> Path:
+    def file(self) -> Path | None:
         """
-        Path to the actual file represented by the object.
+        Path to the actual file represented by the object. If the object
+        is multi-file (such as a video before being concatenated), file
+        will return None.
 
         Returns
         -------
@@ -190,7 +211,7 @@ class SessionFile:
         return self._file
 
     @file.setter
-    def file(self, value: Optional[PathLike]):
+    def file(self, value: Optional[PathLike]) -> None:
         if value is None:
             self._file = None
             return
@@ -200,9 +221,9 @@ class SessionFile:
         self._file = value
 
     @property
-    def trimmed(self) -> Path:
+    def trimmed(self) -> Path | None:
         """
-        Path to the trimmed version of the file.
+        Path to the trimmed version of the file if it exists.
 
         Returns
         -------
@@ -211,7 +232,7 @@ class SessionFile:
         return self._trimmed
 
     @trimmed.setter
-    def trimmed(self, value: Optional[PathLike]):
+    def trimmed(self, value: Optional[PathLike]) -> None:
         if value is None:
             self._trimmed = None
             return
@@ -220,9 +241,9 @@ class SessionFile:
         self.id.check_identity(value)
         self._trimmed = value
 
-    def all_files(self):
+    def all_files(self) -> List[Path]:
         """
-        Get all files in the SessionFile object.
+        Get all files currently in the SessionFile object.
 
         Returns
         -------
@@ -243,13 +264,21 @@ class Session:
     Specifically, this object:
         - Guarantees all paths returned are Path objects
         - Automatically loads/caches more complex objects such as a
-          Partitura Performance without any extra interaction
+          Partitura :external:class:`.Performance` without any extra
+          interaction
         - Provides detailed type hints
         - Makes it easy to add files without knowing what they are
         - Checks that all files are from the same session
     """
+    # The following definitions are useful mainly for the set_unknown
+    # method. The current way this is handled may be a bit fragile and
+    # there is probably room for improvement.
+
+    # These attributes represent lists
     LIST_PATH_KEYS = ["video", "audio"]
+    # These attributes represent split lists
     SPLIT_KEYS = ["split_flac", "split_midi", "split_video"]
+    # These attributes represent single paths
     PATH_KEYS = ["full_midi", "full_flac", "full_video", "full_audio"]
 
     def __init__(self, audio: Optional[SessionFile] = None,
@@ -258,8 +287,9 @@ class Session:
                  flac: Optional[SessionFile] = None,
                  performance: Optional[Performance] = None):
         """
-        Initializes session, optionally takes a custom SessionDict. The
-        session identifier is required.
+        Initializes session, can optionally supply any of the objects
+        in the session. The session identity will automatically be set
+        by scanning the filenames provided.
 
         Parameters
         ----------
@@ -268,6 +298,12 @@ class Session:
         midi : SessionFile, optional
         flac : SessionFile, optional
         performance : Performance, optional
+
+        Raises
+        ------
+        IdentityError
+            If any of the provided files are detected to have mismatching
+            identities.
         """
         self.id = SessionIdentity()
 
@@ -289,8 +325,8 @@ class Session:
     @property
     def performance(self) -> Performance:
         """
-        Get the partitura performance object. If it does not exist it will be
-        loaded from the midi file.
+        Get the partitura :external:class:`.Performance` object. If it
+        does not exist, it will be loaded from the midi file.
 
         Returns
         -------
@@ -299,34 +335,42 @@ class Session:
         Raises
         ------
         AttributeError
-            if no midi file is present within the session
+            If no midi file is present within the session
         """
         if self._performance is None:
-            self._load_performance_from_midi()
-
+            res = self._load_performance_from_midi()
+            if not res:
+                raise AttributeError("Tried to load the performance but no "
+                                     "midi file present in Session.")
         return self._performance
 
-    def _load_performance_from_midi(self) -> Union[Performance, None]:
+    def _load_performance_from_midi(self) -> bool:
+        """Attempt to load a performance from the stored MIDI file, returns
+        False if no MIDI file is found.
+        """
         midi_filepath = self.midi.file
         if midi_filepath is None:
-            return
+            return False
         self._performance = MultimediaTools.load_performance(midi_filepath)
         self._performance[0].sustain_pedal_threshold = 127
+        return True
 
     def set_unknown(self, value: Union[PathLike, list[PathLike]]) -> bool:
         """
-        Set a path that you don't know the filetype off. Will append to
-        existing lists and replace non list values.
+        Set a path that you don't know the filetype of while maintaining
+        the sorting order of all relevant lists. This method relies
+        heavily on the :attr:`.SPLIT_KEYS`, :attr:`.LIST_PATH_KEYS` and
+        :attr:`.PATH_KEYS` attributes.
 
         Parameters
         ----------
         value : PathLike or List of PathLike
-            unknown path to add to session
+            Unknown path to add to session
 
         Returns
         -------
         bool
-            whether the operation was successful
+            Whether the operation was successful
         """
         if not isinstance(value, list):
             value = [value]
@@ -358,23 +402,27 @@ class Session:
 
     def sort_videos(self):
         """
-        Sort the videos within the session in chronological order.
+        Sort the videos within the session in chronological order. This
+        includes any splits.
 
         Returns
         -------
         None
         """
         self.video.file_list.sort(key=PathUtils.get_fileno_p)
+        self.video.sort_splits()
 
     def sort_audios(self):
         """
-        Sort the audios within the session in chronological order
+        Sort the audios within the session in chronological order. This
+        includes any splits.
 
         Returns
         -------
         None
         """
         self.audio.file_list.sort(key=PathUtils.get_fileno_p)
+        self.audio.sort_splits()
 
     def check_properties(self, properties: Union[List[str], str]) -> bool:
         """
@@ -405,9 +453,9 @@ class Session:
                 return False
         return True
 
-    def all_files(self):
+    def all_files(self) -> List[Path]:
         """
-        Get all the files in the Session object.
+        Get all the files currently stored in the Session object.
 
         Returns
         -------
