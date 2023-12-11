@@ -629,3 +629,4 @@ class MultimediaTools:
         no_frames : int
         """
         probe = self.ff_probe(filepath)["streams"][0]["nb_frames"]
+        return probe

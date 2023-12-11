@@ -198,7 +198,7 @@ class SessionFile:
         self._file_list = paths
 
     @property
-    def file(self) -> Path | None:
+    def file(self) -> Union[Path, None]:
         """
         Path to the actual file represented by the object. If the object
         is multi-file (such as a video before being concatenated), file
@@ -221,7 +221,7 @@ class SessionFile:
         self._file = value
 
     @property
-    def trimmed(self) -> Path | None:
+    def trimmed(self) -> Union[Path, None]:
         """
         Path to the trimmed version of the file if it exists.
 
