@@ -45,10 +45,10 @@ class Verify:
 
         if not self.check_len(video_track, flac_track, perf):
             return "incorrect_len"
-#        elif not self.check_tracks(video_track, flac_track):
-#            return "high_DTW"
-#        elif not self.check_midi(perf, flac):
-#            return "midi_DTW"
+        elif not self.check_tracks(video_track, flac_track):
+            return "high_DTW"
+        elif not self.check_midi(perf, flac):
+            return "midi_DTW"
         return True
 
     @staticmethod
