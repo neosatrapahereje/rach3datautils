@@ -7,7 +7,7 @@ Welcome to rach3datautils's documentation!
 ==========================================
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 3
    :caption: Contents:
 
    ./sources/modules
@@ -19,7 +19,7 @@ dataset. It contains various utility functions that help speed up any
 workflow that uses the dataset. This package provides the following:
 
 Alignment
-  The alignment module contains an automated pipeline for fixing the
+  The :mod:`.alignment` module contains an automated pipeline for fixing the
   alignment between the videos and FLAC/MIDI files.
 File Grouping
   The :class:`.DatasetUtils` and :class:`.Session` objects make it easy
