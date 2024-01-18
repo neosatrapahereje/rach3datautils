@@ -1,10 +1,10 @@
-numpy==1.26.2
-scipy==1.11.3
+numpy==1.26.3
+scipy==1.11.4
 git+https://github.com/CPJKU/madmom@main#egg=madmom
 partitura==1.4.1
 tqdm==4.66.1
 python-dotenv==1.0.0
 filedate==2.0
-setuptools==68.2.2
+setuptools==69.0.3
 fastdtw==0.3.4
 ffmpeg-python==0.2.0
