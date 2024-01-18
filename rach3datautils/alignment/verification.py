@@ -74,7 +74,8 @@ class Verify:
     def check_len(track_1: Track,
                   track_2: Track,
                   perf: Performance,
-                  threshold: Optional[float] = None) -> bool:
+                  threshold: Optional[float] = None,
+                  midi_early_threshold: Optional[float] = None) -> bool:
         """
         Compare track and performance lengths using a given threshold.
 
@@ -84,7 +85,11 @@ class Verify:
         track_2 : Track
         perf : Performance
         threshold : float, optional
-            default is 0.5
+            Maximal difference between lengths of two recordings before
+            they're considered invalid. Default is 0.5 seconds.
+        midi_early_threshold : float, optional
+            Maximal difference between the last note-on and the end of a
+            recording. Default is 5 seconds.
 
         Returns
         -------
@@ -93,17 +98,23 @@ class Verify:
         """
         if threshold is None:
             threshold = 0.5
+        if midi_early_threshold is None:
+            midi_early_threshold = 5
 
-        last_note_mid = MultimediaTools.get_last_offset(perf)
+        last_note_mid = MultimediaTools.get_last_time(perf)
         duration_t1 = track_1.duration
         duration_t2 = track_2.duration
 
         if np.abs(duration_t1 - duration_t2) > threshold:
             return False
-        elif last_note_mid > duration_t1 or last_note_mid < duration_t1 - 6:
-            if np.abs(last_note_mid - duration_t1) > threshold or \
-                    np.abs(last_note_mid - duration_t2) > threshold:
-                return False
+        elif last_note_mid > duration_t1 + threshold:
+            return False
+        elif last_note_mid > duration_t2 + threshold:
+            return False
+        elif last_note_mid < duration_t2 - midi_early_threshold:
+            return False
+        elif last_note_mid < duration_t1 - midi_early_threshold:
+            return False
         return True
 
     def check_tracks(self,

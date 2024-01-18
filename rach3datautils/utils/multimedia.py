@@ -233,7 +233,7 @@ class MultimediaTools:
         last_time : float
         """
         note_array = performance.note_array()
-        return note_array[-1][0]
+        return max(note_array["onset_sec"])
 
     @staticmethod
     def get_last_offset(performance: Performance):
@@ -629,3 +629,4 @@ class MultimediaTools:
         no_frames : int
         """
         probe = self.ff_probe(filepath)["streams"][0]["nb_frames"]
+        return probe
