@@ -19,7 +19,8 @@ release = '0.0.1'
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
-extensions = ["sphinx.ext.autodoc", "sphinx.ext.napoleon"]
+extensions = ["sphinx.ext.autodoc", "sphinx.ext.napoleon",
+              "sphinx.ext.intersphinx"]
 
 templates_path = ['_templates']
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
@@ -31,3 +32,12 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
 html_theme = 'sphinx_rtd_theme'
 html_static_path = ['_static']
+
+# -- Options for Intersphinx -------------------------------------------------
+intersphinx_mapping = {
+    "partitura": ("https://partitura.readthedocs.io/en/latest/", None),
+    "numpy": ('https://numpy.org/doc/stable/', None),
+    "python": ('https://docs.python.org/3/', None),
+    "madmom": ('https://madmom.readthedocs.io/en/latest/', None)
+}
+intersphinx_disabled_reftypes = ["std:*", "cpp:*"]

@@ -1,13 +1,14 @@
-# Updating the Documentation
-Make sure to install `Sphinx` and `sphinx_rtd_theme` with pip if you're 
-building locally. Otherwise, just `Sphinx` should be enough.
+# Building the Documentation
+When building make sure to install the package itself with all it's 
+requirements, plus the requirements.txt from this directory.
 
-When updating the docs, it should be sufficient to delete /docs/sources and 
-then run (from the project root):
+To build the docs, first run the following command from the project 
+root:
 ```bash
 sphinx-apidoc -o ./docs/sources rach3datautils
 ```
-If you want to build the page, cd into /docs and run:
+Then to build a html version of the docs run the following from the docs 
+directory.
 ```bash
 make html
 ```
